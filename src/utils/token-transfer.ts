@@ -5,6 +5,7 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import {
+  createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
   getAssociatedTokenAddress,
   getMint,
@@ -114,7 +115,7 @@ export async function createTokenAccountIfNeeded(
 
       // Adicionar instrução para criar token account
       transaction.add(
-        SystemProgram.createAssociatedTokenAccount(
+        createAssociatedTokenAccountInstruction(
           owner,
           tokenAccount,
           owner,
