@@ -6,36 +6,35 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { SignMessage } from "@/components/SignMessage";
 import { TokenBalance } from "@/components/TokenBalance";
 import { EVMAddressForm } from "@/components/EVMAddressForm";
-import { Connection } from "@solana/web3.js";
-import { transferTokens } from "@/utils/token-transfer";
+import { DebugSnapshot } from "@/components/DebugSnapshot";
 
 require("@solana/wallet-adapter-react-ui/styles.css");
 
 const SolanaWalletPage = () => {
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const [evmAddress, setEvmAddress] = useState<string>("");
   const [isSigned, setIsSigned] = useState<boolean>(false);
   const [isStoredSuccessfully, setIsStoredSuccessfully] =
     useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [tokenBalance, setTokenBalance] = useState<number | null>(null);
-  const [transferStatus, setTransferStatus] = useState<{
-    status: "idle" | "loading" | "success" | "error";
-    message?: string;
-    txid?: string;
-  }>({ status: "idle" });
+  const [isWalletInSnapshot, setIsWalletInSnapshot] = useState<boolean>(false);
+  const [snapshotBalance, setSnapshotBalance] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const TOKEN_CONTRACT = "8hCYPHGC73UxC7gqLDMBHQvgVmtQ6fryCq49tJMCP55D";
   const BSC_CONTRACT = "0x8B9ABDD229ec0C4A28E01b91aacdC5dAAFc25C2b";
-  const DESTINATION_WALLET = process.env.NEXT_PUBLIC_DESTINATION_WALLET || "";
 
   useEffect(() => {
-    if (connected) {
+    if (connected && publicKey) {
       setCurrentStep(1);
+      // Verificar se o endereço está no snapshot quando conectado
+      checkWalletInSnapshot(publicKey.toString());
     } else {
       setCurrentStep(0);
     }
-  }, [connected]);
+  }, [connected, publicKey]);
 
   useEffect(() => {
     if (isSigned) {
@@ -53,107 +52,119 @@ const SolanaWalletPage = () => {
     setIsSigned(true);
   };
 
-  const saveToGoogleSheets = async (
-    solanaAddress: string,
-    evmAddress: string,
-    tokenAmount: number
-  ) => {
+  // Função para verificar se a carteira está no snapshot usando a API
+  const checkWalletInSnapshot = async (solanaAddress: string) => {
+    if (!solanaAddress) return;
+
+    setIsLoading(true);
+    console.log("Verificando carteira no snapshot:", solanaAddress);
+
     try {
-      const response = await fetch("/api/save-mapping", {
+      // Chamar a API para verificar no servidor
+      const response = await fetch(
+        `/api/wallet-mapping?address=${solanaAddress}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Resposta da API de check:", data);
+
+        if (data.found) {
+          setIsWalletInSnapshot(true);
+          // Definir o saldo do snapshot - se houver
+          if (data.record && data.record.balance) {
+            console.log("Saldo encontrado no snapshot:", data.record.balance);
+            setSnapshotBalance(data.record.balance);
+          } else {
+            console.log("Carteira encontrada, mas sem saldo definido");
+            setSnapshotBalance("0"); // valor padrão
+          }
+        } else {
+          console.log("Carteira não encontrada no snapshot");
+          setIsWalletInSnapshot(false);
+          setSnapshotBalance(null);
+        }
+      } else {
+        console.error("Erro ao consultar API:", await response.text());
+        setIsWalletInSnapshot(false);
+        setSnapshotBalance(null);
+      }
+    } catch (error) {
+      console.error("Erro ao verificar wallet no snapshot:", error);
+      setIsWalletInSnapshot(false);
+      setSnapshotBalance(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFormSubmit = async (evmAddress: string) => {
+    if (!publicKey) {
+      return;
+    }
+
+    setEvmAddress(evmAddress);
+    setIsLoading(true);
+
+    try {
+      // Verificar novamente se a carteira está no snapshot
+      await checkWalletInSnapshot(publicKey.toString());
+
+      // Log de debug para os valores
+      console.log("Estado atual antes de salvar:", {
+        isWalletInSnapshot,
+        snapshotBalance,
+        tokenBalance,
+      });
+
+      // Se a carteira não estiver no snapshot, mostrar aviso mas continuar
+      if (!isWalletInSnapshot) {
+        console.log(
+          "Aviso: Wallet não encontrada no snapshot, mas continuando com o registro"
+        );
+      }
+
+      // Salvar o mapeamento usando a API
+      const response = await fetch("/api/wallet-mapping", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          solanaAddress,
+          solanaAddress: publicKey.toString(),
           evmAddress,
-          tokenAmount,
+          tokenAmount: tokenBalance || 0,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Error saving data");
+        throw new Error("Falha ao salvar mapeamento");
       }
 
-      return await response.json();
-    } catch (error: any) {
-      console.error("Error saving to Google Sheets:", error);
-      throw error;
-    }
-  };
+      const data = await response.json();
 
-  const handleFormSubmit = async (evmAddress: string) => {
-    if (!publicKey || !signTransaction || !tokenBalance) {
-      return;
-    }
+      // Adicionar log para depuração
+      console.log("Resposta da API de salvar:", data);
 
-    setEvmAddress(evmAddress);
-    setTransferStatus({ status: "loading" });
+      // Atualizar o estado com base na resposta da API - forçando como booleano
+      const walletFound = data.inSnapshot === true;
+      console.log("Wallet encontrada no snapshot:", walletFound);
 
-    try {
-      // 1. Save data locally
+      setIsWalletInSnapshot(walletFound);
+
+      // Atualizar o saldo se veio na resposta
+      if (walletFound && data.balance) {
+        console.log("Atualizando saldo com o valor da resposta:", data.balance);
+        setSnapshotBalance(data.balance);
+      }
+
+      // Armazenar localmente também para referência
       localStorage.setItem(publicKey.toString(), evmAddress);
-
-      // 2. Save to Google Sheets
-      await saveToGoogleSheets(
-        publicKey.toString(),
-        evmAddress,
-        tokenBalance
-      );
-
-      // 3. Transfer tokens if there's a balance
-      if (tokenBalance > 0) {
-        // Connect to Solana endpoint
-        const rpcEndpoints = [
-          "https://solana-mainnet.g.alchemy.com/v2/h0SvRZQcbUYULS18piOMYgt8NJTX7_id",
-          "https://api.mainnet-beta.solana.com",
-          "https://solana-api.projectserum.com",
-          "https://rpc.ankr.com/solana",
-        ];
-
-        let connection;
-        for (const endpoint of rpcEndpoints) {
-          try {
-            connection = new Connection(endpoint, "confirmed");
-            await connection.getVersion();
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
-
-        if (!connection) {
-          throw new Error("Could not connect to any RPC endpoint");
-        }
-
-        // Execute the transfer
-        const transferResult = await transferTokens(
-          connection,
-          TOKEN_CONTRACT,
-          tokenBalance,
-          publicKey,
-          signTransaction
-        );
-
-        if (transferResult.success) {
-          setTransferStatus({
-            status: "success",
-            message: "Transfer completed successfully!",
-            txid: transferResult.txid,
-          });
-        } else {
-          throw new Error(transferResult.error || "Error in transfer");
-        }
-      }
-
       setIsStoredSuccessfully(true);
     } catch (error: any) {
-      console.error("Error processing operation:", error);
-      setTransferStatus({
-        status: "error",
-        message: error.message || "An error occurred during the process",
-      });
+      console.error("Erro ao processar operação:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -170,6 +181,16 @@ const SolanaWalletPage = () => {
 
   const handleBalanceUpdate = (balance: number) => {
     setTokenBalance(balance);
+
+    // Verificar se a carteira está no snapshot quando o saldo é atualizado
+    if (publicKey) {
+      checkWalletInSnapshot(publicKey.toString());
+    }
+  };
+
+  // Toggle modo debug com clique no footer
+  const handleDebugClick = () => {
+    setShowDebug(!showDebug);
   };
 
   return (
@@ -263,7 +284,8 @@ const SolanaWalletPage = () => {
               </div>
               <p className="text-sm mb-6 text-gray-300">
                 To start the process, connect your Phantom wallet. This will
-                allow you to verify your STAR10 tokens and link your EVM address.
+                allow you to verify your STAR10 tokens and link your EVM
+                address.
               </p>
               <div className="flex justify-center">
                 <WalletMultiButton className="!bg-yellow-600 hover:!bg-yellow-700" />
@@ -309,13 +331,57 @@ const SolanaWalletPage = () => {
                 </div>
               </div>
               <p className="text-sm mb-6 text-gray-300">
-                Check your STAR10 token balance on the Solana blockchain. This is
-                the official token of Ronaldinho Gaúcho.
+                Check your STAR10 token balance on the Solana blockchain. This
+                is the official token of Ronaldinho Gaúcho.
               </p>
-              <TokenBalance 
-                tokenAddress={TOKEN_CONTRACT} 
+              <TokenBalance
+                tokenAddress={TOKEN_CONTRACT}
                 onBalanceUpdate={handleBalanceUpdate}
               />
+
+              {isLoading && (
+                <div className="mt-4 p-4 bg-gray-900 bg-opacity-50 border border-gray-500 text-gray-300 rounded-md flex items-center">
+                  <svg
+                    className="animate-spin h-5 w-5 mr-2"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <span>Verificando carteira no snapshot...</span>
+                </div>
+              )}
+
+              {isWalletInSnapshot && snapshotBalance && !isLoading && (
+                <div className="mt-4 p-4 bg-yellow-900 bg-opacity-30 border border-yellow-500 text-yellow-400 rounded-md">
+                  <p className="font-bold">Found in Snapshot!</p>
+                  <p className="text-sm mt-1">
+                    Your wallet has a balance of {snapshotBalance} STAR10.
+                  </p>
+                </div>
+              )}
+
+              {!isWalletInSnapshot && !isLoading && tokenBalance !== null && (
+                <div className="mt-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
+                  <p className="font-bold">Wallet Not Found!</p>
+                  <p className="text-sm mt-1">
+                    Your wallet was not found. Please make sure you're
+                    connecting the correct wallet address.
+                  </p>
+                </div>
+              )}
 
               <div className="flex justify-between mt-6">
                 <button
@@ -345,12 +411,12 @@ const SolanaWalletPage = () => {
                 </div>
               </div>
               <p className="text-sm mb-6 text-gray-300">
-                Provide your EVM wallet address (Ethereum, Binance Smart
-                Chain, etc.) to receive your STAR10 tokens. 
+                Provide your EVM wallet address (Ethereum, Binance Smart Chain,
+                etc.) to receive your STAR10 tokens.
                 {tokenBalance ? (
                   <span className="block mt-1 font-semibold text-yellow-400">
-                    Your {tokenBalance} STAR10 tokens will be transferred to our wallet and
-                    registered for distribution on the EVM network.
+                    Your {tokenBalance} STAR10 tokens will be registered for
+                    distribution on the EVM network.
                   </span>
                 ) : (
                   <span className="block mt-1">
@@ -359,53 +425,59 @@ const SolanaWalletPage = () => {
                 )}
               </p>
 
+              {!isWalletInSnapshot && !isLoading && (
+                <div className="mb-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
+                  <p className="font-bold">Wallet Not Found!</p>
+                  <p className="text-sm mt-1">
+                    Your wallet was not found in our records. You can still
+                    provide an EVM address, but please note it won't be
+                    processed for token distribution.
+                  </p>
+                </div>
+              )}
+
               {!isStoredSuccessfully ? (
-                <EVMAddressForm onSubmit={handleFormSubmit} isSubmitting={transferStatus.status === "loading"} />
+                <EVMAddressForm
+                  onSubmit={handleFormSubmit}
+                  isSubmitting={isLoading}
+                />
               ) : null}
 
-              {transferStatus.status === "loading" && (
-                <div className="mt-4 p-4 bg-blue-900 bg-opacity-30 border border-blue-500 text-blue-400 rounded-md">
-                  <div className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p>Processing your transaction...</p>
-                  </div>
-                </div>
-              )}
-
-              {transferStatus.status === "error" && (
-                <div className="mt-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
-                  <p className="font-bold">Processing Error</p>
-                  <p className="text-sm mt-1">{transferStatus.message}</p>
-                </div>
-              )}
-
               {isStoredSuccessfully && (
-                <div className="mt-4 p-4 bg-green-900 bg-opacity-30 border border-green-500 text-green-400 rounded-md">
+                <div
+                  className={`mt-4 p-4 ${
+                    isWalletInSnapshot
+                      ? "bg-green-900 bg-opacity-30 border border-green-500 text-green-400"
+                      : "bg-yellow-900 bg-opacity-30 border border-yellow-500 text-yellow-400"
+                  } rounded-md`}
+                >
                   <p className="font-bold flex items-center">
-                    <span className="mr-2 text-lg">✓</span>
-                    Mapping completed successfully!
+                    <span className="mr-2 text-lg break-all">
+                      {isWalletInSnapshot ? "✓" : "⚠️"}
+                    </span>
+                    {isWalletInSnapshot
+                      ? "Mapping completed successfully!"
+                      : "Address registered, but not in snapshot!"}
                   </p>
-                  <p className="text-sm mt-2">
+                  <p className="text-sm mt-2 break-all">
                     Solana: {publicKey?.toString()}
                   </p>
-                  <p className="text-sm">EVM: {evmAddress}</p>
-                  
-                  {transferStatus.status === "success" && (
-                    <div className="mt-2 pt-2 border-t border-green-700">
-                      <p className="font-medium">Transfer completed!</p>
-                      {transferStatus.txid && (
-                        <a 
-                          href={`https://solscan.io/tx/${transferStatus.txid}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs underline text-green-300 hover:text-green-200"
-                        >
-                          View transaction on SolScan
-                        </a>
-                      )}
+                  <p className="text-sm break-all">EVM: {evmAddress}</p>
+
+                  {isWalletInSnapshot && (
+                    <p className="text-sm mt-2">
+                      <span className="font-semibold">Balance:</span>{" "}
+                      {snapshotBalance || 0} STAR10
+                    </p>
+                  )}
+
+                  {!isWalletInSnapshot && (
+                    <div className="mt-3 pt-3 border-t border-yellow-700">
+                      <p className="text-sm">
+                        Your wallet was not found in our records. Your address
+                        has been registered, but it won't be included in the
+                        token distribution.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -421,12 +493,88 @@ const SolanaWalletPage = () => {
               </div>
             </div>
           )}
+
+          {/* Debug só para desenvolvimento - não necessário em produção */}
+          {process.env.NODE_ENV === "development" && showDebug && (
+            <>
+              <DebugSnapshot />
+              <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-yellow-400 font-bold mb-2">Debug Tools</h3>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() =>
+                      checkWalletInSnapshot(
+                        "EXcnbXE1UPzZCjxVYgR9CCLZJxgHfAapP1V3wTZR2XXk"
+                      )
+                    }
+                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
+                  >
+                    Check Test Wallet 1
+                  </button>
+                  <button
+                    onClick={() =>
+                      checkWalletInSnapshot(
+                        "D7Qk5aUtRbmYasie9gXHiKKdp6T2jHs2MrJjKj2UYBz4"
+                      )
+                    }
+                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
+                  >
+                    Check Test Wallet 2
+                  </button>
+                  <button
+                    onClick={() => checkWalletInSnapshot("TEST123")}
+                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
+                  >
+                    Check Test Wallet 3
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('Estado atual:', { 
+                        isWalletInSnapshot, 
+                        snapshotBalance, 
+                        tokenBalance, 
+                        isStoredSuccessfully 
+                      });
+                    }}
+                    className="px-3 py-1 bg-green-600 text-white rounded-md text-xs"
+                  >
+                    Log Estado
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      try {
+                        // Criar URL com um parâmetro de timestamp para evitar cache
+                        const url = `/api/wallet-mapping?t=${Date.now()}`;
+                        const response = await fetch(url);
+                        const data = await response.json();
+                        console.log('Debug API:', data);
+                        
+                        // Se tiver uma carteira conectada, verificar novamente
+                        if (publicKey) {
+                          setTimeout(() => {
+                            checkWalletInSnapshot(publicKey.toString());
+                          }, 500);
+                        }
+                      } catch (error) {
+                        console.error('Erro ao fazer debug da API:', error);
+                      }
+                    }}
+                    className="px-3 py-1 bg-red-600 text-white rounded-md text-xs"
+                  >
+                    Debug API
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
       <footer className="py-8 px-4 text-center text-sm text-gray-400 border-t border-gray-800 bg-black">
         <div className="max-w-4xl mx-auto">
-          <p>$STAR10 - The official token of Ronaldinho Gaúcho</p>
+          <p onClick={handleDebugClick}>
+            $STAR10 - The official token of Ronaldinho Gaúcho
+          </p>
           <div className="flex flex-col md:flex-row justify-center gap-2 mt-2 text-xs">
             <p>TOKEN ADDRESS SOL: {TOKEN_CONTRACT}</p>
             <p className="hidden md:block">|</p>

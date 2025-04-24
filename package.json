@@ -30,6 +30,8 @@
     "axios": "^1.6.8",
     "bs58": "^5.0.0",
     "classnames": "^2.5.1",
+    "csv-parse": "^5.6.0",
+    "csv-stringify": "^6.5.2",
     "encoding": "^0.1.13",
     "ethers": "^6.11.1",
     "googleapis": "^148.0.0",
