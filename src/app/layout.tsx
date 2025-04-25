@@ -6,8 +6,9 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 const plusJakartaSans = Plus_Jakarta_Sans({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "FIDC Platform",
-  description: "Blockchain-based FIDC management platform",
+  title: "R10 Token",
+  description: "R10 Token",
+  icons: { icon: "/images/favicon.avif" },
 };
 
 export default function RootLayout({

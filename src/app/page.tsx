@@ -5,6 +5,10 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { SignMessage } from "@/components/SignMessage";
 import { EVMAddressForm } from "@/components/EVMAddressForm";
+import { FaDiscord, FaTelegramPlane } from "react-icons/fa";
+import { FaXTwitter } from "react-icons/fa6";
+import { RiErrorWarningLine } from "react-icons/ri";
+import Link from "next/link";
 
 require("@solana/wallet-adapter-react-ui/styles.css");
 
@@ -176,15 +180,10 @@ const SolanaWalletPage = () => {
     }
   };
 
-  // Toggle modo debug com clique no footer
-  const handleDebugClick = () => {
-    setShowDebug(!showDebug);
-  };
-
   return (
     <main className="min-h-screen bg-black text-white flex flex-col justify-between">
       <header className="fixed top-10 z-10 w-full flex items-center justify-center px-20">
-        <div className="flex items-center gap-3 py-2 px-4 md:px-4 justify-between w-full bg-[rgb(250,231,170)] border-2 border-black text-black rounded-xl">
+        <div className="flex items-center gap-3 py-3 px-4 md:px-4 justify-between w-full bg-[rgb(250,231,170)] border-2 border-black text-black rounded-xl">
           <div className="font-extrabold">$STAR10</div>
 
           <div className="hidden md:flex flex-col bg-[rgb(248,232,182)] border border-black rounded-lg overflow-hidden px-1 py-1">
@@ -206,10 +205,27 @@ const SolanaWalletPage = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="hidden md:block bg-[rgb(247,216,111)] border border-black text-black font-bold py-2 px-4 rounded-lg text-sm">
-              BUY $STAR10 TOKEN
-            </button>
+          <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3">
+              <Link href={"https://discord.gg/star10token"}>
+                <FaDiscord size={20} />
+              </Link>
+              <Link href={"https://x.com/10Ronaldinho"}>
+                <FaXTwitter size={20} />
+              </Link>
+              <Link href={"https://t.me/star10team"}>
+                <FaTelegramPlane size={20} />
+              </Link>
+            </div>
+            <Link
+              href={
+                "https://pix.gotas.com/#0x8b9abdd229ec0c4a28e01b91aacdc5daafc25c2b?focus=true"
+              }
+            >
+              <button className="hidden md:block hover:scale-105 transition-all duration-300 ease-in-out bg-[rgb(247,216,111)] border border-black text-black font-bold py-2 px-4 rounded-lg text-sm">
+                BUY $STAR10 TOKEN
+              </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -248,7 +264,9 @@ const SolanaWalletPage = () => {
                 {step < 3 && (
                   <div
                     className={`w-10 h-1 ${
-                      currentStep > step ? "bg-[rgb(247,216,111)]" : "bg-gray-800"
+                      currentStep > step
+                        ? "bg-[rgb(247,216,111)]"
+                        : "bg-gray-800"
                     }`}
                   ></div>
                 )}
@@ -490,15 +508,40 @@ const SolanaWalletPage = () => {
         </div>
       </section>
 
-      <footer className="py-8 px-4 text-center text-sm text-gray-400 border-t border-gray-800 bg-black">
-        <div className="max-w-4xl mx-auto">
-          <p onClick={handleDebugClick}>
-            $STAR10 - The official token of Ronaldinho Gaúcho
+      <div className="flex w-1/2 items-center justify-center self-center h-full border border-[rgb(247,216,111)] border-dashed rounded-[60px] mb-32">
+        <div className="p-6 px-20 flex items-center gap-10">
+          <RiErrorWarningLine size={100} color="rgb(247,216,111)" className="min-w-[100px]" />
+          <p className="break-all leading-tight">
+            Ronaldinho tokens are designed to provide exclusive experiences and
+            offer utility to the community, granting access to special benefits
+            and interactions. They are not intended to serve as an investment,
+            investment contract, or any form of security. The
+            www.star10token.com website is a utility meme token with no
+            intention of generating passive or active income.
           </p>
-          <div className="flex flex-col md:flex-row justify-center gap-2 mt-2 text-xs">
-            <p>TOKEN ADDRESS SOL: {TOKEN_CONTRACT}</p>
-            <p className="hidden md:block">|</p>
-            <p>TOKEN ADDRESS BSC: {BSC_CONTRACT}</p>
+        </div>
+      </div>
+
+      <footer className="text-center flex flex-col items-center justify-center text-sm text-gray-400 w-full h-[372px]">
+        <div className="py-6 bg-[rgb(247,216,111)] flex flex-col h-full justify-between w-full max-w-[1200px] gap-6">
+          <div className="mx-10 flex items-center gap-3 py-8 px-5 h-[60px] md:px-4 justify-between bg-[rgb(250,231,170)] border-2 border-black text-black rounded-xl">
+            <div className="font-extrabold text-2xl pl-4">$STAR10</div>
+
+            <div className="flex items-center gap-5">
+              <Link href={"#"}>
+                <button className="hidden md:block hover:scale-105 transition-all duration-300 ease-in-out bg-[rgb(247,216,111)] border border-black text-black font-bold py-2 px-4 rounded-lg text-sm">
+                  Back to top
+                </button>
+              </Link>
+            </div>
+          </div>
+
+          <div className="h-[3px] w-full bg-black" />
+
+          <div className="mx-10 font-extrabold flex items-center justify-center h-full">
+            <div className="bg-[rgb(250,231,170)] border-2 border-black text-black h-full w-full rounded-lg  flex items-center justify-center">
+              <h1 className="text-center text-[180px]">$STAR10</h1>
+            </div>
           </div>
         </div>
       </footer>

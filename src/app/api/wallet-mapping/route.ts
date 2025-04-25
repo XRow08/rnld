@@ -18,26 +18,19 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
-
-    console.log(`Verificando endereço: ${address}`);
     
     if (!fs.existsSync(SNAPSHOT_PATH)) {
-      console.log("Arquivo CSV não encontrado:", SNAPSHOT_PATH);
       return NextResponse.json(
         { error: "Arquivo de snapshot não encontrado" },
         { status: 404 }
       );
     }
 
-    // Ler e processar o CSV
     const records = readCSV();
     const cleanAddress = address.trim().toLowerCase();
-    
-    // Buscar o registro
     const foundRecord = findWalletRecord(records, cleanAddress);
 
     if (foundRecord) {
-      console.log("Wallet encontrada:", foundRecord.accountSolana);
       return NextResponse.json({
         found: true,
         record: {
@@ -47,7 +40,6 @@ export async function GET(request: Request) {
         }
       });
     } else {
-      console.log("Wallet não encontrada");
       return NextResponse.json({ found: false });
     }
   } catch (error) {
@@ -70,31 +62,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verificar se arquivo existe
     if (!fs.existsSync(SNAPSHOT_PATH)) {
-      console.log("Arquivo CSV não encontrado:", SNAPSHOT_PATH);
       return NextResponse.json(
         { error: "Arquivo de snapshot não encontrado" },
         { status: 404 }
       );
     }
 
-    // Ler o CSV
     const records = readCSV();
     const cleanAddress = solanaAddress.trim().toLowerCase();
-    
-    // Buscar o registro
     const foundRecord = findWalletRecord(records, cleanAddress);
     
     if (foundRecord) {
-      // Atualizar registro existente
-      console.log("Atualizando wallet encontrada:", foundRecord.accountSolana);
       foundRecord.holderAddressBSC = evmAddress;
-      
-      // Salvar alterações no CSV
       try {
         saveCSV(records);
-        
         return NextResponse.json({
           success: true,
           inSnapshot: true,
@@ -102,7 +84,6 @@ export async function POST(request: Request) {
           message: "Wallet atualizada com sucesso"
         });
       } catch (saveError) {
-        console.error("Erro ao salvar CSV:", saveError);
         return NextResponse.json(
           { 
             success: false, 
@@ -114,9 +95,6 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      console.log("Wallet não encontrada no snapshot");
-      
-      // Opção: Adicionar a wallet mesmo não estando no snapshot original
       records.push({
         accountSolana: solanaAddress,
         tokenAccountSolana: "",
@@ -128,7 +106,6 @@ export async function POST(request: Request) {
       
       try {
         saveCSV(records);
-        
         return NextResponse.json({
           success: true,
           inSnapshot: false,
@@ -151,25 +128,18 @@ export async function POST(request: Request) {
   }
 }
 
-// Função auxiliar para ler o CSV
 function readCSV(): SnapshotRecord[] {
   try {
-    // Ler o CSV
     const fileContent = fs.readFileSync(SNAPSHOT_PATH, "utf8");
-    
-    // Usar csv-parse para processar o CSV corretamente
     const records = parse(fileContent, {
-      columns: false, // Não usar a primeira linha como cabeçalho
+      columns: false,
       skip_empty_lines: true,
       delimiter: ";"
     });
-    
-    // Converter para o formato SnapshotRecord (pulando o cabeçalho)
     const result: SnapshotRecord[] = [];
     for (let i = 1; i < records.length; i++) {
       const row = records[i];
-      if (row.length < 3) continue; // Pular linhas sem dados suficientes
-      
+      if (row.length < 3) continue;
       result.push({
         accountSolana: row[0] ? row[0].trim() : "",
         tokenAccountSolana: row[1] ? row[1].trim() : "",
@@ -187,10 +157,8 @@ function readCSV(): SnapshotRecord[] {
   }
 }
 
-// Função auxiliar para salvar o CSV
 function saveCSV(records: SnapshotRecord[]): void {
   try {
-    // Criar o conteúdo do CSV
     const header = ["Account Solana", "Token Account Solana", "HolderAddress BSC", "Balance", "Public Tag", "Owner"];
     const rows = records.map(record => [
       record.accountSolana,
@@ -200,16 +168,9 @@ function saveCSV(records: SnapshotRecord[]): void {
       record.publicTag,
       record.owner
     ]);
-    
-    // Incluir o cabeçalho
     rows.unshift(header);
-    
-    // Converter para string CSV
     const csvContent = stringify(rows, { delimiter: ";" });
-    
-    // Salvar no arquivo
     fs.writeFileSync(SNAPSHOT_PATH, csvContent, "utf8");
-    
     console.log(`CSV salvo com ${records.length} registros`);
   } catch (error) {
     console.error("Erro ao salvar CSV:", error);
