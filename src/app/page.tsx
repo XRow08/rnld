@@ -265,7 +265,7 @@ const SolanaWalletPage = () => {
                 <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 1: Connect Phantom Wallet
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-black flex items-center justify-center font-bold">
                   1
                 </div>
               </div>
@@ -286,7 +286,7 @@ const SolanaWalletPage = () => {
                 <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 2: Verify Wallet Ownership
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-black flex items-center justify-center font-bold">
                   2
                 </div>
               </div>
@@ -313,7 +313,7 @@ const SolanaWalletPage = () => {
                 <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 3: Check STAR10 Balance
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-black flex items-center justify-center font-bold">
                   3
                 </div>
               </div>
@@ -398,7 +398,7 @@ const SolanaWalletPage = () => {
                 <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 4: Connect EVM Address
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-black flex items-center justify-center font-bold">
                   4
                 </div>
               </div>
