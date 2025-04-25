@@ -38,7 +38,7 @@ export const EVMAddressForm = ({ onSubmit, isSubmitting = false }: EVMAddressFor
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           disabled={isSubmitting}
-          className="w-full p-3 bg-gray-800 border border-yellow-600 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          className="w-full p-3 bg-gray-800 border border-[rgb(247,216,111)] rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[rgb(247,216,111)]"
         />
         {error && (
           <p className="text-red-500 text-sm mt-1">{error}</p>
@@ -48,7 +48,7 @@ export const EVMAddressForm = ({ onSubmit, isSubmitting = false }: EVMAddressFor
       <button 
         type="submit" 
         disabled={isSubmitting}
-        className={`w-full py-3 bg-yellow-600 text-white font-bold rounded-lg hover:bg-yellow-700 transition-colors mt-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+        className={`w-full py-3 bg-[rgb(247,216,111)] text-white font-bold rounded-lg hover:bg-yellow-700 transition-colors mt-2 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
       >
         {isSubmitting ? "PROCESSING..." : "SAVE ADDRESS"}
       </button>

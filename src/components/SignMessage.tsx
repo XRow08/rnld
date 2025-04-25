@@ -40,7 +40,7 @@ export const SignMessage = ({ onSignatureVerified }: SignMessageProps) => {
     <div className="flex flex-col gap-3">
       <button 
         onClick={handleSign} 
-        className="w-full py-3 bg-yellow-600 text-white font-bold rounded-lg hover:bg-yellow-700 transition-colors"
+        className="w-full py-3 bg-[rgb(247,216,111)] text-black font-bold rounded-lg hover:bg-yellow-700 transition-colors"
       >
         SIGN MESSAGE
       </button>

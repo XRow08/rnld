@@ -5,10 +5,8 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { SnapshotRecord } from "@/types/snapshot";
 
-// Caminho do arquivo CSV
 const SNAPSHOT_PATH = path.join(process.cwd(), "public/snapshot.csv");
 
-// Verificar se a wallet existe no CSV
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -23,7 +21,6 @@ export async function GET(request: Request) {
 
     console.log(`Verificando endereço: ${address}`);
     
-    // Verificar se arquivo existe
     if (!fs.existsSync(SNAPSHOT_PATH)) {
       console.log("Arquivo CSV não encontrado:", SNAPSHOT_PATH);
       return NextResponse.json(
@@ -62,10 +59,8 @@ export async function GET(request: Request) {
   }
 }
 
-// Salvar o mapeamento de wallet
 export async function POST(request: Request) {
   try {
-    // Extrair dados do request
     const { solanaAddress, evmAddress } = await request.json();
 
     if (!solanaAddress || !evmAddress) {

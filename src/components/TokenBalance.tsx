@@ -15,7 +15,7 @@ export const TokenBalance = ({ tokenAddress, onBalanceUpdate }: TokenBalanceProp
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchTokenBalance = async () => {
+  /* const fetchTokenBalance = async () => {
     if (!publicKey) {
       setError("Wallet not connected");
       return;
@@ -121,14 +121,14 @@ export const TokenBalance = ({ tokenAddress, onBalanceUpdate }: TokenBalanceProp
       setError(`Could not verify balance. Solana server with limited access.`);
       setIsLoading(false);
     }
-  };
+  }; */
+  
 
   return (
     <div className="flex flex-col gap-4">
       <button
-        onClick={fetchTokenBalance}
         disabled={isLoading}
-        className="w-full py-3 bg-yellow-600 text-white font-bold rounded-lg hover:bg-yellow-700 transition-colors"
+        className="w-full py-3 bg-[rgb(247,216,111)] text-white font-bold rounded-lg hover:bg-yellow-700 transition-colors"
       >
         {isLoading ? "Loading..." : "Check STAR10 Balance"}
       </button>
@@ -144,7 +144,7 @@ export const TokenBalance = ({ tokenAddress, onBalanceUpdate }: TokenBalanceProp
       )}
       
       {balance !== null && !error && (
-        <div className="mt-2 p-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-md">
+        <div className="mt-2 p-4 bg-gradient-to-r from-[rgb(247,216,111)] to-[rgb(247,216,111)] text-white rounded-md">
           <p className="font-medium">STAR10 Balance:</p>
           <p className="text-2xl font-bold">{balance} STAR10</p>
           <p className="text-xs mt-2">Ronaldinho Gaúcho's official token</p>

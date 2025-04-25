@@ -4,9 +4,7 @@ import { useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { SignMessage } from "@/components/SignMessage";
-import { TokenBalance } from "@/components/TokenBalance";
 import { EVMAddressForm } from "@/components/EVMAddressForm";
-import { DebugSnapshot } from "@/components/DebugSnapshot";
 
 require("@solana/wallet-adapter-react-ui/styles.css");
 
@@ -17,7 +15,6 @@ const SolanaWalletPage = () => {
   const [isStoredSuccessfully, setIsStoredSuccessfully] =
     useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
-  const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const [isWalletInSnapshot, setIsWalletInSnapshot] = useState<boolean>(false);
   const [snapshotBalance, setSnapshotBalance] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState<boolean>(false);
@@ -114,7 +111,6 @@ const SolanaWalletPage = () => {
       console.log("Estado atual antes de salvar:", {
         isWalletInSnapshot,
         snapshotBalance,
-        tokenBalance,
       });
 
       // Se a carteira não estiver no snapshot, mostrar aviso mas continuar
@@ -122,6 +118,7 @@ const SolanaWalletPage = () => {
         console.log(
           "Aviso: Wallet não encontrada no snapshot, mas continuando com o registro"
         );
+        return;
       }
 
       // Salvar o mapeamento usando a API
@@ -133,7 +130,7 @@ const SolanaWalletPage = () => {
         body: JSON.stringify({
           solanaAddress: publicKey.toString(),
           evmAddress,
-          tokenAmount: tokenBalance || 0,
+          tokenAmount: snapshotBalance || 0,
         }),
       });
 
@@ -179,15 +176,6 @@ const SolanaWalletPage = () => {
     }
   };
 
-  const handleBalanceUpdate = (balance: number) => {
-    setTokenBalance(balance);
-
-    // Verificar se a carteira está no snapshot quando o saldo é atualizado
-    if (publicKey) {
-      checkWalletInSnapshot(publicKey.toString());
-    }
-  };
-
   // Toggle modo debug com clique no footer
   const handleDebugClick = () => {
     setShowDebug(!showDebug);
@@ -195,32 +183,31 @@ const SolanaWalletPage = () => {
 
   return (
     <main className="min-h-screen bg-black text-white flex flex-col justify-between">
-      {/* STAR10 style header */}
-      <header className="fixed top-0 z-10 w-full flex items-center justify-center px-20 py-10">
-        <div className="flex items-center gap-3 py-3 px-4 md:px-8 justify-between w-full bg-[#f9e8a0] text-black rounded-xl">
+      <header className="fixed top-10 z-10 w-full flex items-center justify-center px-20">
+        <div className="flex items-center gap-3 py-2 px-4 md:px-4 justify-between w-full bg-[rgb(250,231,170)] border-2 border-black text-black rounded-xl">
           <div className="font-extrabold">$STAR10</div>
 
-          <div className="hidden md:flex space-x-1 text-xs bg-white rounded-lg overflow-hidden border border-gray-300 px-1 py-1">
-            <div className="px-2 py-1 flex flex-col items-start">
-              <span className="text-[10px] text-gray-500">
+          <div className="hidden md:flex flex-col bg-[rgb(248,232,182)] border border-black rounded-lg overflow-hidden px-1 py-1">
+            <div className="px-2 flex items-center">
+              <span className="text-[8px] leading-3 text-black font-black">
                 TOKEN ADDRESS BSC:
               </span>
-              <span className="font-mono text-[10px]">
-                {BSC_CONTRACT.slice(0, 10)}...{BSC_CONTRACT.slice(-4)}
+              <span className="text-[8px] leading-3 font-black">
+                {BSC_CONTRACT}
               </span>
             </div>
-            <div className="px-2 py-1 flex flex-col items-start">
-              <span className="text-[10px] text-gray-500">
+            <div className="px-2 flex items-center">
+              <span className="text-[8px] leading-3 text-black font-black">
                 TOKEN ADDRESS SOL:
               </span>
-              <span className="font-mono text-[10px]">
-                {TOKEN_CONTRACT.slice(0, 10)}...{TOKEN_CONTRACT.slice(-4)}
+              <span className="text-[8px] leading-3 font-black">
+                {TOKEN_CONTRACT}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="hidden md:block bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-full text-sm">
+            <button className="hidden md:block bg-[rgb(247,216,111)] border border-black text-black font-bold py-2 px-4 rounded-lg text-sm">
               BUY $STAR10 TOKEN
             </button>
           </div>
@@ -229,7 +216,7 @@ const SolanaWalletPage = () => {
 
       <section className="flex flex-col justify-between pt-40">
         <section className="text-center px-4">
-          <h1 className="text-4xl md:text-6xl text-yellow-600 font-bold mb-4">
+          <h1 className="text-4xl md:text-6xl bg-gradient-to-r from-[rgb(250,231,170)] to-[rgb(247,216,111)] bg-clip-text text-transparent font-bold mb-4">
             STAR10 TOKEN PORTAL
           </h1>
           <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto text-gray-300">
@@ -247,9 +234,9 @@ const SolanaWalletPage = () => {
                   onClick={() => goToStep(step)}
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
                     currentStep >= step
-                      ? "bg-yellow-600 text-white"
+                      ? "bg-[rgb(247,216,111)] text-black"
                       : "bg-gray-800 text-gray-400"
-                  } ${step === currentStep ? "ring-2 ring-white" : ""}`}
+                  } ${step === currentStep ? "border-2 border-black" : ""}`}
                   disabled={
                     (step === 1 && !connected) ||
                     (step === 2 && (!connected || !isSigned)) ||
@@ -261,7 +248,7 @@ const SolanaWalletPage = () => {
                 {step < 3 && (
                   <div
                     className={`w-10 h-1 ${
-                      currentStep > step ? "bg-yellow-600" : "bg-gray-800"
+                      currentStep > step ? "bg-[rgb(247,216,111)]" : "bg-gray-800"
                     }`}
                   ></div>
                 )}
@@ -273,12 +260,12 @@ const SolanaWalletPage = () => {
         {/* Carousel Steps */}
         <div className="max-w-md mx-auto pb-20 px-4">
           {currentStep === 0 && (
-            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-yellow-600 transition-all">
+            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-[rgb(247,216,111)] transition-all">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-yellow-400">
+                <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 1: Connect Phantom Wallet
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-yellow-600 text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
                   1
                 </div>
               </div>
@@ -288,18 +275,18 @@ const SolanaWalletPage = () => {
                 address.
               </p>
               <div className="flex justify-center">
-                <WalletMultiButton className="!bg-yellow-600 hover:!bg-yellow-700" />
+                <WalletMultiButton className="!bg-[rgb(247,216,111)] hover:!bg-yellow-700" />
               </div>
             </div>
           )}
 
           {currentStep === 1 && (
-            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-yellow-600 transition-all">
+            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-[rgb(247,216,111)] transition-all">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-yellow-400">
+                <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 2: Verify Wallet Ownership
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-yellow-600 text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
                   2
                 </div>
               </div>
@@ -321,12 +308,12 @@ const SolanaWalletPage = () => {
           )}
 
           {currentStep === 2 && (
-            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-yellow-600 transition-all">
+            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-[rgb(247,216,111)] transition-all">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-yellow-400">
+                <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 3: Check STAR10 Balance
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-yellow-600 text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
                   3
                 </div>
               </div>
@@ -334,10 +321,10 @@ const SolanaWalletPage = () => {
                 Check your STAR10 token balance on the Solana blockchain. This
                 is the official token of Ronaldinho Gaúcho.
               </p>
-              <TokenBalance
+              {/* <snapshotBalance
                 tokenAddress={TOKEN_CONTRACT}
                 onBalanceUpdate={handleBalanceUpdate}
-              />
+              /> */}
 
               {isLoading && (
                 <div className="mt-4 p-4 bg-gray-900 bg-opacity-50 border border-gray-500 text-gray-300 rounded-md flex items-center">
@@ -365,7 +352,7 @@ const SolanaWalletPage = () => {
               )}
 
               {isWalletInSnapshot && snapshotBalance && !isLoading && (
-                <div className="mt-4 p-4 bg-yellow-900 bg-opacity-30 border border-yellow-500 text-yellow-400 rounded-md">
+                <div className="mt-4 p-4 bg-yellow-900 bg-opacity-30 border border-[rgb(247,216,111)] text-[rgb(247,216,111)] rounded-md">
                   <p className="font-bold">Found in Snapshot!</p>
                   <p className="text-sm mt-1">
                     Your wallet has a balance of {snapshotBalance} STAR10.
@@ -373,7 +360,7 @@ const SolanaWalletPage = () => {
                 </div>
               )}
 
-              {!isWalletInSnapshot && !isLoading && tokenBalance !== null && (
+              {!isWalletInSnapshot && (
                 <div className="mt-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
                   <p className="font-bold">Wallet Not Found!</p>
                   <p className="text-sm mt-1">
@@ -390,32 +377,37 @@ const SolanaWalletPage = () => {
                 >
                   Back
                 </button>
-                <button
-                  onClick={() => goToStep(3)}
-                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
-                >
-                  Next
-                </button>
+                {isWalletInSnapshot &&
+                  !isLoading &&
+                  snapshotBalance &&
+                  Number(snapshotBalance) > 0 && (
+                    <button
+                      onClick={() => goToStep(3)}
+                      className="px-4 py-2 bg-[rgb(247,216,111)] text-black rounded-lg hover:bg-yellow-700"
+                    >
+                      Next
+                    </button>
+                  )}
               </div>
             </div>
           )}
 
           {currentStep === 3 && (
-            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-yellow-600 transition-all">
+            <div className="p-6 bg-gray-900 bg-opacity-80 rounded-lg shadow-xl mb-6 border border-[rgb(247,216,111)] transition-all">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-yellow-400">
+                <h2 className="text-xl font-semibold text-[rgb(247,216,111)]">
                   Step 4: Connect EVM Address
                 </h2>
-                <div className="w-8 h-8 rounded-full bg-yellow-600 text-white flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-full bg-[rgb(247,216,111)] text-white flex items-center justify-center font-bold">
                   4
                 </div>
               </div>
               <p className="text-sm mb-6 text-gray-300">
                 Provide your EVM wallet address (Ethereum, Binance Smart Chain,
                 etc.) to receive your STAR10 tokens.
-                {tokenBalance ? (
-                  <span className="block mt-1 font-semibold text-yellow-400">
-                    Your {tokenBalance} STAR10 tokens will be registered for
+                {snapshotBalance ? (
+                  <span className="block mt-1 font-semibold text-[rgb(247,216,111)]">
+                    Your {snapshotBalance} STAR10 tokens will be registered for
                     distribution on the EVM network.
                   </span>
                 ) : (
@@ -425,16 +417,18 @@ const SolanaWalletPage = () => {
                 )}
               </p>
 
-              {!isWalletInSnapshot && !isLoading && (
-                <div className="mb-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
-                  <p className="font-bold">Wallet Not Found!</p>
-                  <p className="text-sm mt-1">
-                    Your wallet was not found in our records. You can still
-                    provide an EVM address, but please note it won't be
-                    processed for token distribution.
-                  </p>
-                </div>
-              )}
+              {!isWalletInSnapshot &&
+                !isLoading &&
+                snapshotBalance !== null && (
+                  <div className="mb-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
+                    <p className="font-bold">Wallet Not Found!</p>
+                    <p className="text-sm mt-1">
+                      Your wallet was not found in our records. You can still
+                      provide an EVM address, but please note it won't be
+                      processed for token distribution.
+                    </p>
+                  </div>
+                )}
 
               {!isStoredSuccessfully ? (
                 <EVMAddressForm
@@ -448,7 +442,7 @@ const SolanaWalletPage = () => {
                   className={`mt-4 p-4 ${
                     isWalletInSnapshot
                       ? "bg-green-900 bg-opacity-30 border border-green-500 text-green-400"
-                      : "bg-yellow-900 bg-opacity-30 border border-yellow-500 text-yellow-400"
+                      : "bg-yellow-900 bg-opacity-30 border border-[rgb(247,216,111)] text-[rgb(247,216,111)]"
                   } rounded-md`}
                 >
                   <p className="font-bold flex items-center">
@@ -492,80 +486,6 @@ const SolanaWalletPage = () => {
                 </button>
               </div>
             </div>
-          )}
-
-          {/* Debug só para desenvolvimento - não necessário em produção */}
-          {process.env.NODE_ENV === "development" && showDebug && (
-            <>
-              <DebugSnapshot />
-              <div className="mt-4 p-4 bg-gray-800 rounded-lg">
-                <h3 className="text-yellow-400 font-bold mb-2">Debug Tools</h3>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() =>
-                      checkWalletInSnapshot(
-                        "EXcnbXE1UPzZCjxVYgR9CCLZJxgHfAapP1V3wTZR2XXk"
-                      )
-                    }
-                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
-                  >
-                    Check Test Wallet 1
-                  </button>
-                  <button
-                    onClick={() =>
-                      checkWalletInSnapshot(
-                        "D7Qk5aUtRbmYasie9gXHiKKdp6T2jHs2MrJjKj2UYBz4"
-                      )
-                    }
-                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
-                  >
-                    Check Test Wallet 2
-                  </button>
-                  <button
-                    onClick={() => checkWalletInSnapshot("TEST123")}
-                    className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
-                  >
-                    Check Test Wallet 3
-                  </button>
-                  <button
-                    onClick={() => {
-                      console.log('Estado atual:', { 
-                        isWalletInSnapshot, 
-                        snapshotBalance, 
-                        tokenBalance, 
-                        isStoredSuccessfully 
-                      });
-                    }}
-                    className="px-3 py-1 bg-green-600 text-white rounded-md text-xs"
-                  >
-                    Log Estado
-                  </button>
-                  <button 
-                    onClick={async () => {
-                      try {
-                        // Criar URL com um parâmetro de timestamp para evitar cache
-                        const url = `/api/wallet-mapping?t=${Date.now()}`;
-                        const response = await fetch(url);
-                        const data = await response.json();
-                        console.log('Debug API:', data);
-                        
-                        // Se tiver uma carteira conectada, verificar novamente
-                        if (publicKey) {
-                          setTimeout(() => {
-                            checkWalletInSnapshot(publicKey.toString());
-                          }, 500);
-                        }
-                      } catch (error) {
-                        console.error('Erro ao fazer debug da API:', error);
-                      }
-                    }}
-                    className="px-3 py-1 bg-red-600 text-white rounded-md text-xs"
-                  >
-                    Debug API
-                  </button>
-                </div>
-              </div>
-            </>
           )}
         </div>
       </section>
