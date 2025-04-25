@@ -508,20 +508,6 @@ const SolanaWalletPage = () => {
         </div>
       </section>
 
-      <div className="flex w-1/2 items-center justify-center self-center h-full border border-[rgb(247,216,111)] border-dashed rounded-[60px] mb-32">
-        <div className="p-6 px-20 flex items-center gap-10">
-          <RiErrorWarningLine size={100} color="rgb(247,216,111)" className="min-w-[100px]" />
-          <p className="break-all leading-tight">
-            Ronaldinho tokens are designed to provide exclusive experiences and
-            offer utility to the community, granting access to special benefits
-            and interactions. They are not intended to serve as an investment,
-            investment contract, or any form of security. The
-            www.star10token.com website is a utility meme token with no
-            intention of generating passive or active income.
-          </p>
-        </div>
-      </div>
-
       <footer className="text-center flex flex-col items-center justify-center text-sm text-gray-400 w-full h-[372px]">
         <div className="py-6 bg-[rgb(247,216,111)] flex flex-col h-full justify-between w-full max-w-[1200px] gap-6">
           <div className="mx-10 flex items-center gap-3 py-8 px-5 h-[60px] md:px-4 justify-between bg-[rgb(250,231,170)] border-2 border-black text-black rounded-xl">
@@ -540,7 +526,7 @@ const SolanaWalletPage = () => {
 
           <div className="mx-10 font-extrabold flex items-center justify-center h-full">
             <div className="bg-[rgb(250,231,170)] border-2 border-black text-black h-full w-full rounded-lg  flex items-center justify-center">
-              <h1 className="text-center text-[180px]">$STAR10</h1>
+              <h1 className="text-center lg:text-[180px] md:text-[120px] text-[80px]">$STAR10</h1>
             </div>
           </div>
         </div>
