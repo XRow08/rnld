@@ -5,6 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { SignMessage } from "@/components/SignMessage";
 import { EVMAddressForm } from "@/components/EVMAddressForm";
+import { ClaimButton } from "@/components/ClaimButton";
 import { FaDiscord, FaTelegramPlane } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
 import Link from "next/link";
@@ -538,6 +539,22 @@ const SolanaWalletPage = () => {
               </div>
             </div>
           )}
+
+          {/* Claim Section - Sempre mostrada, mas habilitada apenas quando as condições são atendidas */}
+          <div className="mt-8 mb-6">
+            <ClaimButton 
+              snapshotBalance={snapshotBalance} 
+              evmAddress={evmAddress} 
+              merkleProof={merkleProof}
+              isEnabled={isWalletInSnapshot && isStoredSuccessfully && 
+                merkleProof !== null && 
+                evmAddress !== "" && 
+                connected && 
+                !!publicKey &&
+                snapshotBalance !== null && 
+                Number(snapshotBalance) > 0}
+            />
+          </div>
         </div>
       </section>
 
