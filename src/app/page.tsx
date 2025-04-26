@@ -7,7 +7,6 @@ import { SignMessage } from "@/components/SignMessage";
 import { EVMAddressForm } from "@/components/EVMAddressForm";
 import { FaDiscord, FaTelegramPlane } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
-import { RiErrorWarningLine } from "react-icons/ri";
 import Link from "next/link";
 
 require("@solana/wallet-adapter-react-ui/styles.css");
@@ -21,8 +20,9 @@ const SolanaWalletPage = () => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [isWalletInSnapshot, setIsWalletInSnapshot] = useState<boolean>(false);
   const [snapshotBalance, setSnapshotBalance] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [merkleProof, setMerkleProof] = useState<string[] | null>(null);
+  const [verificationMethod, setVerificationMethod] = useState<string>("unknown");
 
   const TOKEN_CONTRACT = "8hCYPHGC73UxC7gqLDMBHQvgVmtQ6fryCq49tJMCP55D";
   const BSC_CONTRACT = "0x8B9ABDD229ec0C4A28E01b91aacdC5dAAFc25C2b";
@@ -30,7 +30,6 @@ const SolanaWalletPage = () => {
   useEffect(() => {
     if (connected && publicKey) {
       setCurrentStep(1);
-      // Verificar se o endereço está no snapshot quando conectado
       checkWalletInSnapshot(publicKey.toString());
     } else {
       setCurrentStep(0);
@@ -80,20 +79,36 @@ const SolanaWalletPage = () => {
             console.log("Carteira encontrada, mas sem saldo definido");
             setSnapshotBalance("0"); // valor padrão
           }
+          
+          // Set Merkle proof if available
+          if (data.merkleProof) {
+            console.log("Merkle proof found:", data.merkleProof);
+            setMerkleProof(data.merkleProof);
+            setVerificationMethod("merkle");
+          } else {
+            setMerkleProof(null);
+            setVerificationMethod("csv");
+          }
         } else {
           console.log("Carteira não encontrada no snapshot");
           setIsWalletInSnapshot(false);
           setSnapshotBalance(null);
+          setMerkleProof(null);
+          setVerificationMethod("unknown");
         }
       } else {
         console.error("Erro ao consultar API:", await response.text());
         setIsWalletInSnapshot(false);
         setSnapshotBalance(null);
+        setMerkleProof(null);
+        setVerificationMethod("unknown");
       }
     } catch (error) {
       console.error("Erro ao verificar wallet no snapshot:", error);
       setIsWalletInSnapshot(false);
       setSnapshotBalance(null);
+      setMerkleProof(null);
+      setVerificationMethod("unknown");
     } finally {
       setIsLoading(false);
     }
@@ -115,6 +130,8 @@ const SolanaWalletPage = () => {
       console.log("Estado atual antes de salvar:", {
         isWalletInSnapshot,
         snapshotBalance,
+        merkleProof,
+        verificationMethod
       });
 
       // Se a carteira não estiver no snapshot, mostrar aviso mas continuar
@@ -157,6 +174,12 @@ const SolanaWalletPage = () => {
       if (walletFound && data.balance) {
         console.log("Atualizando saldo com o valor da resposta:", data.balance);
         setSnapshotBalance(data.balance);
+      }
+      
+      // Update Merkle proof if available
+      if (data.merkleProof) {
+        setMerkleProof(data.merkleProof);
+        setVerificationMethod("merkle");
       }
 
       // Armazenar localmente também para referência
@@ -375,6 +398,11 @@ const SolanaWalletPage = () => {
                   <p className="text-sm mt-1">
                     Your wallet has a balance of {snapshotBalance} STAR10.
                   </p>
+                  {merkleProof && (
+                    <p className="text-xs mt-1 text-gray-400">
+                      <span className="font-semibold text-green-400">✓ Verified</span> using Merkle proof
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -480,6 +508,11 @@ const SolanaWalletPage = () => {
                     <p className="text-sm mt-2">
                       <span className="font-semibold">Balance:</span>{" "}
                       {snapshotBalance || 0} STAR10
+                      {merkleProof && (
+                        <span className="text-xs ml-2 text-green-400">
+                          ✓ Merkle verified
+                        </span>
+                      )}
                     </p>
                   )}
 

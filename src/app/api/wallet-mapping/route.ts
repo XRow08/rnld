@@ -4,8 +4,24 @@ import path from "path";
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { SnapshotRecord } from "@/types/snapshot";
+import { verifyAddressInMerkleTree, generateMerkleTree } from "@/utils/merkle-verification";
+
+// Type for Merkle tree result
+type MerkleResult = {
+  isInTree: boolean;
+  proof?: string[];
+  balance?: string;
+};
 
 const SNAPSHOT_PATH = path.join(process.cwd(), "public/snapshot.csv");
+
+// Generate Merkle tree on startup if it doesn't exist
+try {
+  generateMerkleTree();
+  console.log("Merkle tree generated successfully");
+} catch (error) {
+  console.error("Error generating Merkle tree on startup:", error);
+}
 
 export async function GET(request: Request) {
   try {
@@ -26,6 +42,27 @@ export async function GET(request: Request) {
       );
     }
 
+    // First, try to check the Merkle tree
+    try {
+      const merkleResult = verifyAddressInMerkleTree(address);
+      
+      // If the address is in the Merkle tree, return that result
+      if (merkleResult.isInTree) {
+        return NextResponse.json({
+          found: true,
+          record: {
+            solana: address,
+            balance: merkleResult.balance || "0",
+          },
+          merkleProof: merkleResult.proof
+        });
+      }
+    } catch (merkleError) {
+      console.error("Error checking Merkle tree:", merkleError);
+      // Continue with CSV check if Merkle tree check fails
+    }
+
+    // Fallback to CSV check for backwards compatibility
     const records = readCSV();
     const cleanAddress = address.trim().toLowerCase();
     const foundRecord = findWalletRecord(records, cleanAddress);
@@ -69,6 +106,81 @@ export async function POST(request: Request) {
       );
     }
 
+    let merkleResult: MerkleResult = { isInTree: false };
+    
+    // First try to check the Merkle tree to verify if the address is in the snapshot
+    try {
+      merkleResult = verifyAddressInMerkleTree(solanaAddress);
+    } catch (merkleError) {
+      console.error("Error checking Merkle tree:", merkleError);
+      // Continue with CSV check if Merkle tree check fails
+    }
+    
+    // If the address is in the Merkle tree, use that information
+    if (merkleResult.isInTree) {
+      const records = readCSV();
+      const cleanAddress = solanaAddress.trim().toLowerCase();
+      const foundRecord = findWalletRecord(records, cleanAddress);
+      
+      if (foundRecord) {
+        foundRecord.holderAddressBSC = evmAddress;
+        try {
+          saveCSV(records);
+          return NextResponse.json({
+            success: true,
+            inSnapshot: true,
+            balance: merkleResult.balance || "0",
+            merkleProof: merkleResult.proof,
+            message: "Wallet atualizada com sucesso"
+          });
+        } catch (saveError) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: "Erro ao salvar dados",
+              inSnapshot: true,
+              balance: merkleResult.balance || "0",
+              merkleProof: merkleResult.proof
+            },
+            { status: 500 }
+          );
+        }
+      } else {
+        // Address in Merkle tree but not in CSV - add it
+        records.push({
+          accountSolana: solanaAddress,
+          tokenAccountSolana: "",
+          holderAddressBSC: evmAddress,
+          balance: merkleResult.balance || "0",
+          publicTag: "",
+          owner: ""
+        });
+        
+        try {
+          saveCSV(records);
+          return NextResponse.json({
+            success: true,
+            inSnapshot: true,
+            balance: merkleResult.balance || "0",
+            merkleProof: merkleResult.proof,
+            message: "Wallet adicionada com sucesso"
+          });
+        } catch (saveError) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: "Erro ao salvar dados",
+              inSnapshot: true,
+              balance: merkleResult.balance || "0",
+              merkleProof: merkleResult.proof
+            },
+            { status: 500 }
+          );
+        }
+      }
+    }
+
+    // Fallback to traditional CSV method for backward compatibility
     const records = readCSV();
     const cleanAddress = solanaAddress.trim().toLowerCase();
     const foundRecord = findWalletRecord(records, cleanAddress);
