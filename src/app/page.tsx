@@ -28,6 +28,16 @@ const SolanaWalletPage = () => {
   const TOKEN_CONTRACT = "8hCYPHGC73UxC7gqLDMBHQvgVmtQ6fryCq49tJMCP55D";
   const BSC_CONTRACT = "0x8B9ABDD229ec0C4A28E01b91aacdC5dAAFc25C2b";
 
+  // Calculate if the claim button should be enabled
+  const isClaimEnabled = isWalletInSnapshot && 
+    isStoredSuccessfully && 
+    merkleProof !== null && 
+    evmAddress !== "" && 
+    connected && 
+    !!publicKey &&
+    snapshotBalance !== null && 
+    Number(snapshotBalance) > 0;
+
   useEffect(() => {
     if (connected && publicKey) {
       setCurrentStep(1);
@@ -540,19 +550,13 @@ const SolanaWalletPage = () => {
             </div>
           )}
 
-          {/* Claim Section - Sempre mostrada, mas habilitada apenas quando as condições são atendidas */}
+          {/* Claim Section - Always shown, but enabled only when conditions are met */}
           <div className="mt-8 mb-6">
             <ClaimButton 
               snapshotBalance={snapshotBalance} 
-              evmAddress={evmAddress} 
-              merkleProof={merkleProof}
-              isEnabled={isWalletInSnapshot && isStoredSuccessfully && 
-                merkleProof !== null && 
-                evmAddress !== "" && 
-                connected && 
-                !!publicKey &&
-                snapshotBalance !== null && 
-                Number(snapshotBalance) > 0}
+              evmAddress={evmAddress || ""} 
+              merkleProof={merkleProof} 
+              isEnabled={isClaimEnabled}
             />
           </div>
         </div>
