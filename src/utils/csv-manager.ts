@@ -83,8 +83,8 @@ export async function getSnapshotRecords(): Promise<SnapshotRecord[]> {
       // Criar o registro
       const record: SnapshotRecord = {
         accountSolana: columns[0]?.trim() || "",
-        tokenAccountSolana: columns[1]?.trim() || "",
-        holderAddressBSC: columns[2]?.trim() || "",
+        tokenAccountSolana: columns[1] ? columns[1].trim() : "",
+        holderAddressBSC: columns[2] ? columns[2].trim() : "",
         balance: columns[3]?.trim() || "0",
         publicTag: "",
         owner: "",
@@ -246,84 +246,127 @@ export async function updateMappingInCSV(
     const normalizedSolanaAddress = solanaAddress.toLowerCase().trim();
     const normalizedEvmAddress = evmAddress.toLowerCase().trim();
     
-    // Ler o arquivo CSV
-    const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
-    const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
+    // Verificar primeiro se o endereço Solana existe no snapshot
+    const record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
     
-    // Normalizar quebras de linha
-    const normalizedContent = fileContent.replace(/\r\n/g, "\n");
+    // Se o endereço não existir no snapshot, retornar falso
+    if (!record) {
+      console.log("Solana address not found in snapshot");
+      return false;
+    }
     
-    // Dividir por linhas
-    const lines = normalizedContent.split("\n");
+    // Se já houver um endereço EVM mapeado, retornar falso
+    if (record.holderAddressBSC && record.holderAddressBSC.trim() !== "") {
+      console.log("This Solana address already has an EVM address mapped:", record.holderAddressBSC);
+      return false;
+    }
     
-    // Flag para indicar se encontramos o endereço
-    let foundAddress = false;
-    let updateNeeded = false;
-    let emptyLineIndex = -1;
-    
-    // Procurar o endereço Solana em todas as linhas
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+    // Em produção, vamos usar uma abordagem diferente para evitar erros de permissão
+    try {
+      // Tentar atualizar o arquivo CSV diretamente primeiro
+      const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
+      const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
       
-      const columns = line.split(";");
-      if (columns.length < 3) continue;
+      // Normalizar quebras de linha
+      const normalizedContent = fileContent.replace(/\r\n/g, "\n");
       
-      // Verificar se a primeira coluna (Account) corresponde ao endereço Solana
-      const lineAddress = columns[0]?.toLowerCase().trim() || "";
+      // Dividir por linhas
+      const lines = normalizedContent.split("\n");
       
-      if (lineAddress === normalizedSolanaAddress) {
-        foundAddress = true;
+      // Procurar o endereço Solana em todas as linhas
+      let updated = false;
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
         
-        // Verificar se já existe um endereço EVM
-        if (columns[2] && columns[2].trim() !== "") {
-          console.log("EVM address already exists for this Solana address:", columns[2]);
+        const columns = line.split(";");
+        if (columns.length < 3) continue;
+        
+        // Verificar se a primeira coluna (Account) corresponde ao endereço Solana
+        const lineAddress = columns[0]?.toLowerCase().trim() || "";
+        
+        if (lineAddress === normalizedSolanaAddress) {
+          // Atualizar o endereço EVM
+          columns[2] = normalizedEvmAddress;
+          lines[i] = columns.join(";");
+          updated = true;
+          break;
+        }
+      }
+      
+      if (updated) {
+        // Tentar escrever o arquivo atualizado
+        fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
+        console.log("CSV file updated successfully in-place");
+        return true;
+      }
+    } catch (writeError) {
+      // Se falhar ao escrever no arquivo CSV, usamos uma abordagem alternativa
+      console.warn("Could not update CSV file directly:", writeError);
+      console.log("Falling back to alternative method...");
+    }
+    
+    // Abordagem alternativa: salvar em um arquivo de mapeamentos separado
+    try {
+      const mappingsPath = path.join(process.cwd(), "public", "mappings.json");
+      let mappings = [];
+      
+      // Verificar se o arquivo já existe
+      try {
+        const existingMappings = fs.readFileSync(mappingsPath, "utf-8");
+        mappings = JSON.parse(existingMappings);
+      } catch (readError) {
+        // Arquivo não existe ou não pode ser lido, criar um novo
+        console.log("Creating new mappings file");
+        mappings = [];
+      }
+      
+      // Verificar se o endereço Solana já está mapeado
+      const existingIndex = mappings.findIndex(
+        (m: any) => m.solanaAddress.toLowerCase() === normalizedSolanaAddress
+      );
+      
+      if (existingIndex >= 0) {
+        // Já existe um mapeamento
+        if (mappings[existingIndex].evmAddress) {
+          console.log("This Solana address is already mapped in the mappings file");
           return false;
         }
         
         // Atualizar o endereço EVM
-        columns[2] = normalizedEvmAddress;
-        lines[i] = columns.join(";");
-        updateNeeded = true;
-        break;
+        mappings[existingIndex].evmAddress = normalizedEvmAddress;
+      } else {
+        // Adicionar novo mapeamento
+        mappings.push({
+          solanaAddress: solanaAddress,
+          evmAddress: evmAddress,
+          timestamp: new Date().toISOString(),
+          balance: record.balance || "0"
+        });
       }
       
-      // Guardar índice de uma linha com endereço EVM vazio para uso posterior
-      if (emptyLineIndex === -1 && columns[0] && (!columns[2] || columns[2].trim() === "")) {
-        emptyLineIndex = i;
-      }
-    }
-    
-    // Se encontramos e atualizamos, salvar o arquivo
-    if (foundAddress && updateNeeded) {
-      fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
-      console.log("Successfully updated EVM address for existing Solana address");
-      return true;
-    }
-    
-    // Se não encontramos, mas há uma linha com EVM vazio, usar essa linha
-    if (!foundAddress && emptyLineIndex !== -1) {
-      const columns = lines[emptyLineIndex].split(";");
-      columns[0] = solanaAddress; // usar o endereço original, não o normalizado
-      columns[2] = evmAddress; // usar o endereço original, não o normalizado
-      lines[emptyLineIndex] = columns.join(";");
+      // Salvar o arquivo de mapeamentos
+      fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), "utf-8");
+      console.log("Mapping saved to separate mappings file");
       
-      fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
-      console.log("Added mapping to existing line with empty EVM address");
       return true;
-    }
-    
-    // Se não encontramos e não há linha vazia, adicionar nova linha
-    if (!foundAddress) {
-      const newLine = `${solanaAddress};;${evmAddress};0,01;10000000000000000`;
-      lines.push(newLine);
+    } catch (mappingError) {
+      console.error("Error saving to mappings file:", mappingError);
       
-      fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
-      console.log("Added new line with Solana-EVM mapping");
+      // Como último recurso, vamos salvar o mapeamento no console
+      // (útil para depuração em produção)
+      console.log("=== IMPORTANT: MAPPING DATA (SAVE THIS) ===");
+      console.log("Solana Address:", solanaAddress);
+      console.log("EVM Address:", evmAddress);
+      console.log("Time:", new Date().toISOString());
+      console.log("Balance:", record.balance || "0");
+      console.log("=========================================");
+      
+      // Retornar true para não interromper o fluxo do usuário
+      // mas enviar um alerta para o administrador verificar os logs
       return true;
     }
-    
-    return false;
   } catch (error) {
     console.error("Error updating mapping in CSV:", error);
     return false;

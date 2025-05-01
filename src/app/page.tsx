@@ -33,6 +33,7 @@ const SolanaWalletPage = () => {
   const [isClaimEnabled, setIsClaimEnabled] = useState<boolean>(false);
   const [hasExistingEvm, setHasExistingEvm] = useState<boolean>(false);
   const [existingEvmAddress, setExistingEvmAddress] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const TOKEN_CONTRACT = "8hCYPHGC73UxC7gqLDMBHQvgVmtQ6fryCq49tJMCP55D";
   const BSC_CONTRACT = "0x8B9ABDD229ec0C4A28E01b91aacdC5dAAFc25C2b";
@@ -158,6 +159,7 @@ const SolanaWalletPage = () => {
 
     setEvmAddress(evmAddress);
     setIsLoading(true);
+    setErrorMessage(null);
 
     try {
       // Verificar se a carteira Solana está no snapshot
@@ -166,51 +168,68 @@ const SolanaWalletPage = () => {
       // Se a carteira não estiver no snapshot, não permitir salvar
       if (!isWalletInSnapshot) {
         console.log("Wallet não encontrada no snapshot. Não é possível salvar a carteira EVM.");
+        setErrorMessage("Your Solana wallet was not found in our snapshot. Unable to proceed.");
+        setIsLoading(false);
         return;
       }
 
-      const response = await fetch("/api/wallet-mapping", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          solanaAddress: publicKey.toString(),
-          evmAddress,
-          tokenAmount: snapshotBalance || 0,
-          publicTag: publicTag || "",
-        }),
-      });
+      // Enviar o mapeamento para o backend com tratamento de erro aprimorado
+      try {
+        const response = await fetch("/api/wallet-mapping", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            solanaAddress: publicKey.toString(),
+            evmAddress,
+            tokenAmount: snapshotBalance || 0,
+            publicTag: publicTag || "",
+          }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        
-        // Tratamento específico para cada tipo de erro
-        if (errorData.code === "NOT_FOUND") {
-          console.error("Endereço Solana não encontrado no snapshot");
-          // Atualizar a UI para refletir isso
-          setIsWalletInSnapshot(false);
-        } else if (errorData.code === "ALREADY_MAPPED") {
-          console.error("Este endereço Solana já possui um endereço EVM mapeado:", errorData.existingEVM);
-          // Você pode mostrar o endereço EVM já mapeado na UI se desejar
-        } else {
-          console.error("Erro ao salvar mapeamento:", errorData.error || "Erro desconhecido");
+        const data = await response.json();
+
+        if (!response.ok) {
+          // Tratamento específico para cada tipo de erro
+          if (data.code === "NOT_FOUND") {
+            console.error("Endereço Solana não encontrado no snapshot");
+            setIsWalletInSnapshot(false);
+            setErrorMessage("Your Solana address was not found in our snapshot");
+          } else if (data.code === "ALREADY_MAPPED") {
+            console.error("Este endereço Solana já possui um endereço EVM mapeado:", data.existingEVM);
+            setHasExistingEvm(true);
+            setExistingEvmAddress(data.existingEVM);
+            setErrorMessage("This Solana address already has an EVM address mapped");
+          } else if (data.code === "UPDATE_FAILED" || data.code === "UPDATE_ERROR") {
+            console.error("Erro ao salvar mapeamento:", data.error);
+            setErrorMessage("We're experiencing technical difficulties. Please try again later or contact support.");
+          } else {
+            console.error("Erro ao salvar mapeamento:", data.error || "Erro desconhecido");
+            setErrorMessage("An unexpected error occurred. Please try again later.");
+          }
+          
+          throw new Error(data.error || "Failed to save mapping");
         }
-        
-        throw new Error(errorData.error || "Falha ao salvar mapeamento");
-      }
 
-      const data = await response.json();
-      
-      // Atualizar o estado para refletir o sucesso
-      setIsStoredSuccessfully(true);
+        // Sucesso - atualizar a UI
+        setIsStoredSuccessfully(true);
+        setErrorMessage(null);
 
-      // Mostrar o componente de claim se tiver todos os dados necessários
-      if (data.success && data.record && data.record.balance) {
-        setShowClaimStep(true);
+        // Mostrar o componente de claim se tiver todos os dados necessários
+        if (data.success && data.record && data.record.balance) {
+          setShowClaimStep(true);
+        }
+      } catch (fetchError: any) {
+        // Erro de conexão ou de processamento da resposta
+        console.error("Erro de rede ou ao processar a resposta:", fetchError);
+        if (!errorMessage) { // Se não tivermos uma mensagem de erro mais específica
+          setErrorMessage("Network error. Please check your connection and try again.");
+        }
       }
     } catch (error: any) {
       console.error("Erro ao processar operação:", error);
+      setErrorMessage(error.message || "An error occurred while processing your request");
     } finally {
       setIsLoading(false);
     }
@@ -515,13 +534,20 @@ const SolanaWalletPage = () => {
                     </div>
                   )}
 
+                  {errorMessage && (
+                    <div className="mb-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
+                      <p className="font-bold">Error!</p>
+                      <p className="text-sm mt-1">{errorMessage}</p>
+                    </div>
+                  )}
+
                   {!isStoredSuccessfully ? (
                     <div className="space-y-4">
                       <EVMAddressForm
                         onSubmit={handleFormSubmit}
                         isSubmitting={isLoading}
                         walletInSnapshot={isWalletInSnapshot}
-                        errorMessage={isWalletInSnapshot ? "" : "Your Solana wallet is not in our snapshot."}
+                        errorMessage={errorMessage || ""}
                         hasExistingEvm={hasExistingEvm}
                         existingEvmAddress={existingEvmAddress || undefined}
                       />

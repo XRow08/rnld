@@ -164,17 +164,37 @@ export async function POST(request: Request) {
       );
     }
 
-    // Atualizar o mapeamento no CSV
-    console.log("Updating mapping in CSV...");
-    const updated = await updateMappingInCSV(normalizedSolanaAddress, normalizedEvmAddress);
-    console.log("Update result:", updated);
+    // Atualizar o mapeamento (no CSV ou em arquivo alternativo)
+    console.log("Updating mapping...");
+    try {
+      const updated = await updateMappingInCSV(normalizedSolanaAddress, normalizedEvmAddress);
+      console.log("Update result:", updated);
 
-    if (!updated) {
+      if (!updated) {
+        return NextResponse.json(
+          { 
+            success: false,
+            error: "Failed to update mapping. The address may not exist in the snapshot or already has an EVM address.",
+            code: "UPDATE_FAILED"
+          },
+          { status: 400 }
+        );
+      }
+    } catch (updateError: any) {
+      console.error("Error during mapping update:", updateError);
+      
+      // Log detalhado para depuração em produção
+      console.log("=== ERROR DETAILS ===");
+      console.log("Error message:", updateError.message);
+      console.log("Error stack:", updateError.stack);
+      console.log("====================");
+      
       return NextResponse.json(
         { 
           success: false,
-          error: "Failed to update mapping.",
-          code: "UPDATE_FAILED"
+          error: "An error occurred while updating the mapping. Please try again later.",
+          code: "UPDATE_ERROR",
+          details: updateError.message
         },
         { status: 500 }
       );
@@ -182,14 +202,18 @@ export async function POST(request: Request) {
 
     // Buscar o registro atualizado
     console.log("Fetching updated record...");
-    record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
-    console.log("Updated record:", record);
+    try {
+      record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
+      console.log("Updated record:", record);
+    } catch (fetchError) {
+      console.error("Error fetching updated record:", fetchError);
+      // Não retornamos erro aqui, apenas continuamos com o registro original
+    }
 
     console.log('=== Wallet Mapping Debug Info ===');
     console.log('Solana Address:', normalizedSolanaAddress);
     console.log('EVM Address:', normalizedEvmAddress);
     console.log('Record after update:', record);
-    console.log('Mapping updated in CSV:', updated);
     console.log('===============================');
 
     return NextResponse.json({
@@ -203,10 +227,18 @@ export async function POST(request: Request) {
         publicTag: record?.publicTag || ""
       }
     });
-  } catch (error) {
-    console.error("Error updating wallet mapping:", error);
+  } catch (error: any) {
+    // Erro genérico - poderia ser erro ao processar JSON, etc.
+    console.error("Unexpected error in wallet mapping API:", error);
+    console.log("Error details:", error.message);
+    console.log("Error stack:", error.stack);
+    
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        success: false,
+        error: "An unexpected error occurred. Please try again later.",
+        code: "UNEXPECTED_ERROR"
+      },
       { status: 500 }
     );
   }
