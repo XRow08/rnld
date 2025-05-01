@@ -1,50 +1,45 @@
 import { NextResponse } from "next/server";
-import { findBySolanaAddressInCSV, getSnapshotRecords, updateMappingInCSV } from "@/utils/csv-manager";
-import fs from "fs";
-import path from "path";
+import { findSolanaAddressInSnapshotFile, getMappingBySolanaAddress, saveWalletMapping } from "@/utils/supabase-server";
 
 // Função para verificar diretamente o conteúdo do arquivo CSV
-async function checkCSVContent(solanaAddress: string): Promise<boolean> {
+async function checkSolanaAddress(solanaAddress: string): Promise<{
+  found: boolean;
+  balance?: string;
+  hasEVM?: boolean;
+  evmAddress?: string;
+}> {
   try {
-    const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
-    const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
+    // Primeiro verificar no banco de dados Supabase
+    const mapping = await getMappingBySolanaAddress(solanaAddress);
     
-    console.log("Direct CSV check - content length:", fileContent.length);
-    
-    // Normalizar o endereço
-    const normalizedAddress = solanaAddress.toLowerCase().trim();
-    
-    // Dividir o conteúdo em linhas
-    const lines = fileContent.split("\n");
-    console.log(`Direct CSV check - total lines: ${lines.length}`);
-    
-    // Verificar cada linha manualmente
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line.trim()) continue;
-      
-      const columns = line.split(";");
-      if (columns.length < 3) continue;
-      
-      const addressInCsv = columns[0]?.toLowerCase().trim() || "";
-      
-      // Comparar o endereço
-      if (addressInCsv === normalizedAddress) {
-        console.log(`Direct CSV check - Found matching address at line ${i + 1}`);
-        return true;
-      }
-      
-      // Mostrar as primeiras linhas para debug
-      if (i < 5) {
-        console.log(`Direct CSV check - Line ${i + 1}: Address="${addressInCsv}"`);
-      }
+    if (mapping) {
+      return {
+        found: true,
+        balance: mapping.balance,
+        hasEVM: !!mapping.evm_address,
+        evmAddress: mapping.evm_address
+      };
     }
     
-    console.log(`Direct CSV check - Address "${normalizedAddress}" not found in file`);
-    return false;
+    // Se não encontrado no banco, verificar no arquivo do snapshot
+    const snapshotResult = await findSolanaAddressInSnapshotFile(solanaAddress);
+    
+    if (snapshotResult.found) {
+      // Encontrado no snapshot mas não no banco, então adicionar no banco
+      await saveWalletMapping(solanaAddress, "", snapshotResult.balance || "0");
+      
+      return {
+        found: true,
+        balance: snapshotResult.balance,
+        hasEVM: false
+      };
+    }
+    
+    // Não encontrado em nenhum lugar
+    return { found: false };
   } catch (error) {
-    console.error("Error in direct CSV check:", error);
-    return false;
+    console.error("Error in checkSolanaAddress:", error);
+    return { found: false };
   }
 }
 
@@ -60,39 +55,29 @@ export async function GET(request: Request) {
     console.log("===== WALLET MAPPING GET REQUEST =====");
     console.log("Checking address:", address);
     
-    // Verificar diretamente no CSV
-    const directCheck = await checkCSVContent(address);
-    console.log("Direct CSV check result:", directCheck);
+    // Verificar endereço usando a função que busca tanto no Supabase quanto no CSV
+    const result = await checkSolanaAddress(address);
     
-    // Verificar usando as funções existentes
-    const record = await findBySolanaAddressInCSV(address);
-
-    if (record) {
-      // Endereço encontrado no snapshot
-      const hasEVM = record.holderAddressBSC && record.holderAddressBSC.trim() !== "";
-      
+    if (result.found) {
+      // Endereço encontrado
       return NextResponse.json({
         found: true,
-        hasEVM: hasEVM,
-        message: hasEVM 
+        hasEVM: result.hasEVM || false,
+        message: result.hasEVM 
           ? "This Solana address already has an EVM address mapped" 
           : "Solana address found and eligible for EVM mapping",
         record: {
           solanaAddress: address,
-          balance: record.balance || "0",
-          balanceNormalized: record.balanceNormalized || "0",
-          evmAddress: record.holderAddressBSC || "",
-          publicTag: record.publicTag || "",
-        },
-        directCheck
+          balance: result.balance || "0",
+          evmAddress: result.evmAddress || "",
+        }
       });
     } else {
-      // Endereço não encontrado no snapshot
+      // Endereço não encontrado
       return NextResponse.json({
         found: false,
         hasEVM: false,
-        message: "Solana address not found in snapshot",
-        directCheck
+        message: "Solana address not found in snapshot"
       });
     }
   } catch (error) {
@@ -132,11 +117,11 @@ export async function POST(request: Request) {
     console.log("Normalized EVM Address:", normalizedEvmAddress);
 
     // Verificar se o endereço Solana existe no snapshot
-    console.log("Checking if Solana address exists in snapshot...");
-    let record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
+    console.log("Checking if Solana address exists...");
+    const checkResult = await checkSolanaAddress(normalizedSolanaAddress);
     
-    // Se não existir no snapshot, retornar erro
-    if (!record) {
+    // Se não existir, retornar erro
+    if (!checkResult.found) {
       console.log("Solana address not found in snapshot");
       return NextResponse.json(
         { 
@@ -148,29 +133,33 @@ export async function POST(request: Request) {
       );
     }
     
-    console.log("Record found:", record);
+    console.log("Check result:", checkResult);
 
     // Verificar se já existe um endereço EVM para esta wallet Solana
-    if (record.holderAddressBSC && record.holderAddressBSC.trim() !== "") {
-      console.log("Solana address already has an EVM address mapped:", record.holderAddressBSC);
+    if (checkResult.hasEVM) {
+      console.log("Solana address already has an EVM address mapped:", checkResult.evmAddress);
       return NextResponse.json(
         { 
           success: false,
           error: "This Solana address already has an EVM address mapped",
           code: "ALREADY_MAPPED",
-          existingEVM: record.holderAddressBSC
+          existingEVM: checkResult.evmAddress
         },
         { status: 400 }
       );
     }
 
-    // Atualizar o mapeamento (no CSV ou em arquivo alternativo)
-    console.log("Updating mapping...");
+    // Atualizar o mapeamento no Supabase
+    console.log("Saving mapping to Supabase...");
     try {
-      const updated = await updateMappingInCSV(normalizedSolanaAddress, normalizedEvmAddress);
-      console.log("Update result:", updated);
+      const saved = await saveWalletMapping(
+        normalizedSolanaAddress, 
+        normalizedEvmAddress, 
+        checkResult.balance || "0"
+      );
+      console.log("Save result:", saved);
 
-      if (!updated) {
+      if (!saved) {
         return NextResponse.json(
           { 
             success: false,
@@ -182,12 +171,6 @@ export async function POST(request: Request) {
       }
     } catch (updateError: any) {
       console.error("Error during mapping update:", updateError);
-      
-      // Log detalhado para depuração em produção
-      console.log("=== ERROR DETAILS ===");
-      console.log("Error message:", updateError.message);
-      console.log("Error stack:", updateError.stack);
-      console.log("====================");
       
       return NextResponse.json(
         { 
@@ -202,18 +185,12 @@ export async function POST(request: Request) {
 
     // Buscar o registro atualizado
     console.log("Fetching updated record...");
-    try {
-      record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
-      console.log("Updated record:", record);
-    } catch (fetchError) {
-      console.error("Error fetching updated record:", fetchError);
-      // Não retornamos erro aqui, apenas continuamos com o registro original
-    }
+    const updatedMapping = await getMappingBySolanaAddress(normalizedSolanaAddress);
 
     console.log('=== Wallet Mapping Debug Info ===');
     console.log('Solana Address:', normalizedSolanaAddress);
     console.log('EVM Address:', normalizedEvmAddress);
-    console.log('Record after update:', record);
+    console.log('Updated mapping:', updatedMapping);
     console.log('===============================');
 
     return NextResponse.json({
@@ -222,9 +199,7 @@ export async function POST(request: Request) {
       record: {
         solanaAddress: normalizedSolanaAddress,
         evmAddress: normalizedEvmAddress,
-        balance: record?.balance || "0",
-        balanceNormalized: record?.balanceNormalized || "0",
-        publicTag: record?.publicTag || ""
+        balance: updatedMapping?.balance || checkResult.balance || "0"
       }
     });
   } catch (error: any) {

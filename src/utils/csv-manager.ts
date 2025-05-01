@@ -204,15 +204,132 @@ export async function saveMapping(
   }
 }
 
+// Função para salvar mapeamentos em um arquivo separado que será acessível em produção
+async function saveMappingToFile(solanaAddress: string, evmAddress: string, balance: string): Promise<boolean> {
+  try {
+    // Caminho para um diretório com permissões de escrita (pasta tmp/ ou .next/)
+    const mappingsDir = path.join(process.cwd(), "public", "data");
+    const mappingsPath = path.join(mappingsDir, "mappings.json");
+    
+    // Certificar-se de que o diretório existe
+    try {
+      if (!fs.existsSync(mappingsDir)) {
+        fs.mkdirSync(mappingsDir, { recursive: true });
+        console.log("Created mappings directory");
+      }
+    } catch (mkdirError) {
+      console.warn("Could not create mappings directory:", mkdirError);
+    }
+    
+    // Ler mapeamentos existentes ou criar um novo array
+    let mappings = [];
+    try {
+      if (fs.existsSync(mappingsPath)) {
+        const existingData = fs.readFileSync(mappingsPath, "utf-8");
+        mappings = JSON.parse(existingData);
+        console.log(`Read ${mappings.length} existing mappings`);
+      }
+    } catch (readError) {
+      console.warn("Error reading existing mappings:", readError);
+      mappings = []; // Iniciar com array vazio se não puder ler
+    }
+    
+    // Verificar se o endereço Solana já existe
+    const existingIndex = mappings.findIndex(
+      (m: any) => m.solanaAddress.toLowerCase() === solanaAddress.toLowerCase()
+    );
+    
+    if (existingIndex >= 0) {
+      // Já existe um mapeamento, verificar se tem EVM
+      if (mappings[existingIndex].evmAddress && mappings[existingIndex].evmAddress.trim() !== "") {
+        console.log("This Solana address already has an EVM mapping");
+        return false;
+      }
+      
+      // Atualizar o mapeamento existente
+      mappings[existingIndex].evmAddress = evmAddress;
+      mappings[existingIndex].updatedAt = new Date().toISOString();
+    } else {
+      // Adicionar novo mapeamento
+      mappings.push({
+        solanaAddress,
+        evmAddress,
+        balance,
+        createdAt: new Date().toISOString()
+      });
+    }
+    
+    // Salvar o arquivo
+    fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), "utf-8");
+    console.log(`Saved ${mappings.length} mappings to file`);
+    
+    // Também tentar salvar em formato CSV para fácil visualização
+    try {
+      const csvPath = path.join(mappingsDir, "mappings.csv");
+      let csvContent = "SolanaAddress;EVMAddress;Balance;CreatedAt\n";
+      
+      mappings.forEach((m: any) => {
+        csvContent += `${m.solanaAddress};${m.evmAddress};${m.balance};${m.createdAt}\n`;
+      });
+      
+      fs.writeFileSync(csvPath, csvContent, "utf-8");
+      console.log("Also saved mappings as CSV");
+    } catch (csvError) {
+      console.warn("Could not save CSV version:", csvError);
+      // Não falhar por causa disso
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error saving mapping to file:", error);
+    return false;
+  }
+}
+
+// Função para buscar mapeamento EVM existente para um endereço Solana
+export async function getMappingForSolanaAddress(solanaAddress: string): Promise<string | null> {
+  try {
+    const normalizedAddress = solanaAddress.toLowerCase().trim();
+    
+    // Primeiro verificar no arquivo CSV principal
+    const record = await findBySolanaAddressInCSV(normalizedAddress);
+    if (record && record.holderAddressBSC && record.holderAddressBSC.trim() !== "") {
+      return record.holderAddressBSC;
+    }
+    
+    // Se não encontrou, verificar no arquivo de mapeamentos
+    const mappingsPath = path.join(process.cwd(), "public", "data", "mappings.json");
+    if (fs.existsSync(mappingsPath)) {
+      const data = fs.readFileSync(mappingsPath, "utf-8");
+      const mappings = JSON.parse(data);
+      
+      const mapping = mappings.find(
+        (m: any) => m.solanaAddress.toLowerCase() === normalizedAddress
+      );
+      
+      if (mapping && mapping.evmAddress) {
+        return mapping.evmAddress;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error getting mapping for Solana address:", error);
+    return null;
+  }
+}
+
 export async function findBySolanaAddressInCSV(
   solanaAddress: string
 ): Promise<SnapshotRecord | null> {
   try {
-    // Obter todos os registros
-    const records = await getSnapshotRecords();
-    
-    // Normalizar o endereço para comparação
     const normalizedAddress = solanaAddress.toLowerCase().trim();
+    
+    // Primeiro verificar mapeamento salvo separadamente
+    const existingEVM = await getMappingForSolanaAddress(normalizedAddress);
+    
+    // Obter dados do snapshot
+    const records = await getSnapshotRecords();
     
     console.log(`Searching for Solana address: ${normalizedAddress}`);
     console.log(`Total records to search: ${records.length}`);
@@ -225,6 +342,12 @@ export async function findBySolanaAddressInCSV(
       // Comparar os endereços
       if (recordAddress === normalizedAddress) {
         console.log(`Found matching record for address: ${normalizedAddress}`);
+        
+        // Se temos um mapeamento EVM salvo separadamente, usá-lo
+        if (existingEVM) {
+          record.holderAddressBSC = existingEVM;
+        }
+        
         return record;
       }
     }
@@ -255,15 +378,16 @@ export async function updateMappingInCSV(
       return false;
     }
     
-    // Se já houver um endereço EVM mapeado, retornar falso
-    if (record.holderAddressBSC && record.holderAddressBSC.trim() !== "") {
-      console.log("This Solana address already has an EVM address mapped:", record.holderAddressBSC);
+    // Verificar se já existe um mapeamento via função de busca que inclui arquivo separado
+    const existingEVM = await getMappingForSolanaAddress(normalizedSolanaAddress);
+    if (existingEVM) {
+      console.log("This Solana address already has an EVM address mapped:", existingEVM);
       return false;
     }
     
-    // Em produção, vamos usar uma abordagem diferente para evitar erros de permissão
+    // Tentar salvar primeiro no arquivo CSV
+    let savedInCSV = false;
     try {
-      // Tentar atualizar o arquivo CSV diretamente primeiro
       const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
       const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
       
@@ -299,76 +423,53 @@ export async function updateMappingInCSV(
         // Tentar escrever o arquivo atualizado
         fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
         console.log("CSV file updated successfully in-place");
-        return true;
+        savedInCSV = true;
       }
-    } catch (writeError) {
-      // Se falhar ao escrever no arquivo CSV, usamos uma abordagem alternativa
-      console.warn("Could not update CSV file directly:", writeError);
-      console.log("Falling back to alternative method...");
+    } catch (csvError) {
+      console.warn("Could not update CSV file directly:", csvError);
     }
     
-    // Abordagem alternativa: salvar em um arquivo de mapeamentos separado
-    try {
-      const mappingsPath = path.join(process.cwd(), "public", "mappings.json");
-      let mappings = [];
-      
-      // Verificar se o arquivo já existe
-      try {
-        const existingMappings = fs.readFileSync(mappingsPath, "utf-8");
-        mappings = JSON.parse(existingMappings);
-      } catch (readError) {
-        // Arquivo não existe ou não pode ser lido, criar um novo
-        console.log("Creating new mappings file");
-        mappings = [];
-      }
-      
-      // Verificar se o endereço Solana já está mapeado
-      const existingIndex = mappings.findIndex(
-        (m: any) => m.solanaAddress.toLowerCase() === normalizedSolanaAddress
+    // Se não conseguiu salvar no CSV ou não encontrou o endereço, salvar em arquivo separado
+    if (!savedInCSV) {
+      console.log("Saving mapping to separate file...");
+      const saved = await saveMappingToFile(
+        solanaAddress, 
+        evmAddress, 
+        record.balance || "0"
       );
       
-      if (existingIndex >= 0) {
-        // Já existe um mapeamento
-        if (mappings[existingIndex].evmAddress) {
-          console.log("This Solana address is already mapped in the mappings file");
-          return false;
-        }
-        
-        // Atualizar o endereço EVM
-        mappings[existingIndex].evmAddress = normalizedEvmAddress;
+      if (saved) {
+        console.log("Successfully saved mapping to separate file");
+        return true;
       } else {
-        // Adicionar novo mapeamento
-        mappings.push({
-          solanaAddress: solanaAddress,
-          evmAddress: evmAddress,
-          timestamp: new Date().toISOString(),
-          balance: record.balance || "0"
-        });
+        console.error("Failed to save mapping to any location");
+        return false;
       }
-      
-      // Salvar o arquivo de mapeamentos
-      fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), "utf-8");
-      console.log("Mapping saved to separate mappings file");
-      
-      return true;
-    } catch (mappingError) {
-      console.error("Error saving to mappings file:", mappingError);
-      
-      // Como último recurso, vamos salvar o mapeamento no console
-      // (útil para depuração em produção)
-      console.log("=== IMPORTANT: MAPPING DATA (SAVE THIS) ===");
-      console.log("Solana Address:", solanaAddress);
-      console.log("EVM Address:", evmAddress);
-      console.log("Time:", new Date().toISOString());
-      console.log("Balance:", record.balance || "0");
-      console.log("=========================================");
-      
-      // Retornar true para não interromper o fluxo do usuário
-      // mas enviar um alerta para o administrador verificar os logs
-      return true;
     }
+    
+    return true;
   } catch (error) {
     console.error("Error updating mapping in CSV:", error);
+    
+    // Tentar salvar em arquivo separado como último recurso
+    try {
+      const record = await findBySolanaAddressInCSV(solanaAddress);
+      if (record) {
+        const saved = await saveMappingToFile(
+          solanaAddress, 
+          evmAddress, 
+          record.balance || "0"
+        );
+        
+        if (saved) {
+          console.log("Saved mapping to separate file after error");
+          return true;
+        }
+      }
+    } catch (fallbackError) {
+      console.error("Error in fallback save:", fallbackError);
+    }
+    
     return false;
   }
 }
