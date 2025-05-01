@@ -1,5 +1,52 @@
 import { NextResponse } from "next/server";
-import { findBySolanaAddress, getSnapshotRecords } from "@/utils/csv-manager";
+import { findBySolanaAddressInCSV, getSnapshotRecords, updateMappingInCSV } from "@/utils/csv-manager";
+import fs from "fs";
+import path from "path";
+
+// Função para verificar diretamente o conteúdo do arquivo CSV
+async function checkCSVContent(solanaAddress: string): Promise<boolean> {
+  try {
+    const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
+    const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
+    
+    console.log("Direct CSV check - content length:", fileContent.length);
+    
+    // Normalizar o endereço
+    const normalizedAddress = solanaAddress.toLowerCase().trim();
+    
+    // Dividir o conteúdo em linhas
+    const lines = fileContent.split("\n");
+    console.log(`Direct CSV check - total lines: ${lines.length}`);
+    
+    // Verificar cada linha manualmente
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      
+      const columns = line.split(";");
+      if (columns.length < 3) continue;
+      
+      const addressInCsv = columns[0]?.toLowerCase().trim() || "";
+      
+      // Comparar o endereço
+      if (addressInCsv === normalizedAddress) {
+        console.log(`Direct CSV check - Found matching address at line ${i + 1}`);
+        return true;
+      }
+      
+      // Mostrar as primeiras linhas para debug
+      if (i < 5) {
+        console.log(`Direct CSV check - Line ${i + 1}: Address="${addressInCsv}"`);
+      }
+    }
+    
+    console.log(`Direct CSV check - Address "${normalizedAddress}" not found in file`);
+    return false;
+  } catch (error) {
+    console.error("Error in direct CSV check:", error);
+    return false;
+  }
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -10,16 +57,44 @@ export async function GET(request: Request) {
   }
 
   try {
-    const snapshotData = await findBySolanaAddress(address);
+    console.log("===== WALLET MAPPING GET REQUEST =====");
+    console.log("Checking address:", address);
+    
+    // Verificar diretamente no CSV
+    const directCheck = await checkCSVContent(address);
+    console.log("Direct CSV check result:", directCheck);
+    
+    // Verificar usando as funções existentes
+    const record = await findBySolanaAddressInCSV(address);
 
-    if (snapshotData.error) {
-      return NextResponse.json({ error: snapshotData.error }, { status: 500 });
+    if (record) {
+      // Endereço encontrado no snapshot
+      const hasEVM = record.holderAddressBSC && record.holderAddressBSC.trim() !== "";
+      
+      return NextResponse.json({
+        found: true,
+        hasEVM: hasEVM,
+        message: hasEVM 
+          ? "This Solana address already has an EVM address mapped" 
+          : "Solana address found and eligible for EVM mapping",
+        record: {
+          solanaAddress: address,
+          balance: record.balance || "0",
+          balanceNormalized: record.balanceNormalized || "0",
+          evmAddress: record.holderAddressBSC || "",
+          publicTag: record.publicTag || "",
+        },
+        directCheck
+      });
+    } else {
+      // Endereço não encontrado no snapshot
+      return NextResponse.json({
+        found: false,
+        hasEVM: false,
+        message: "Solana address not found in snapshot",
+        directCheck
+      });
     }
-
-    return NextResponse.json({
-      found: !!snapshotData,
-      record: snapshotData || null,
-    });
   } catch (error) {
     console.error("Error fetching wallet data:", error);
     return NextResponse.json(
@@ -38,7 +113,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { solanaAddress, evmAddress } = body;
 
+    console.log("===== WALLET MAPPING POST REQUEST =====");
+    console.log("Request body:", body);
+
     if (!solanaAddress || !evmAddress) {
+      console.log("Missing required parameters");
       return NextResponse.json(
         { error: "Solana address and EVM address are required" },
         { status: 400 }
@@ -48,42 +127,69 @@ export async function POST(request: Request) {
     // Normalizar endereços
     const normalizedSolanaAddress = solanaAddress.toLowerCase().trim();
     const normalizedEvmAddress = evmAddress.toLowerCase().trim();
+    
+    console.log("Normalized Solana Address:", normalizedSolanaAddress);
+    console.log("Normalized EVM Address:", normalizedEvmAddress);
 
-    // Carregar registros do snapshot
-    const snapshotRecords = await getSnapshotRecords();
-    console.log('Total records loaded:', snapshotRecords.length);
-
-    // Encontrar o registro do endereço Solana
-    const record = snapshotRecords.find(
-      (r) => r.accountSolana.toLowerCase().trim() === normalizedSolanaAddress
-    );
-
+    // Verificar se o endereço Solana existe no snapshot
+    console.log("Checking if Solana address exists in snapshot...");
+    let record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
+    
+    // Se não existir no snapshot, retornar erro
     if (!record) {
+      console.log("Solana address not found in snapshot");
       return NextResponse.json(
-        { error: "Solana address not found in snapshot" },
+        { 
+          success: false,
+          error: "Solana address not found in snapshot",
+          code: "NOT_FOUND"
+        },
         { status: 404 }
       );
     }
+    
+    console.log("Record found:", record);
 
-    // Verificar se o endereço EVM já está mapeado
+    // Verificar se já existe um endereço EVM para esta wallet Solana
     if (record.holderAddressBSC && record.holderAddressBSC.trim() !== "") {
+      console.log("Solana address already has an EVM address mapped:", record.holderAddressBSC);
       return NextResponse.json(
-        { error: "Solana address already mapped to an EVM address" },
+        { 
+          success: false,
+          error: "This Solana address already has an EVM address mapped",
+          code: "ALREADY_MAPPED",
+          existingEVM: record.holderAddressBSC
+        },
         { status: 400 }
       );
     }
 
-    // Atualizar o registro com o novo endereço EVM
-    record.holderAddressBSC = normalizedEvmAddress;
+    // Atualizar o mapeamento no CSV
+    console.log("Updating mapping in CSV...");
+    const updated = await updateMappingInCSV(normalizedSolanaAddress, normalizedEvmAddress);
+    console.log("Update result:", updated);
 
-    // Salvar o registro atualizado
-    // TODO: Implementar a lógica de salvamento no banco de dados ou arquivo
+    if (!updated) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: "Failed to update mapping.",
+          code: "UPDATE_FAILED"
+        },
+        { status: 500 }
+      );
+    }
+
+    // Buscar o registro atualizado
+    console.log("Fetching updated record...");
+    record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
+    console.log("Updated record:", record);
 
     console.log('=== Wallet Mapping Debug Info ===');
     console.log('Solana Address:', normalizedSolanaAddress);
     console.log('EVM Address:', normalizedEvmAddress);
-    console.log('Record Balance:', record.balance);
-    console.log('Record Balance Normalized:', record.balanceNormalized);
+    console.log('Record after update:', record);
+    console.log('Mapping updated in CSV:', updated);
     console.log('===============================');
 
     return NextResponse.json({
@@ -92,8 +198,9 @@ export async function POST(request: Request) {
       record: {
         solanaAddress: normalizedSolanaAddress,
         evmAddress: normalizedEvmAddress,
-        balance: record.balance,
-        balanceNormalized: record.balanceNormalized
+        balance: record?.balance || "0",
+        balanceNormalized: record?.balanceNormalized || "0",
+        publicTag: record?.publicTag || ""
       }
     });
   } catch (error) {
@@ -103,4 +210,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+} 

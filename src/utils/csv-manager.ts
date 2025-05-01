@@ -1,6 +1,6 @@
-import { parse } from 'csv-parse/sync';
-import fs from 'fs';
-import path from 'path';
+import { parse } from "csv-parse/sync";
+import fs from "fs";
+import path from "path";
 
 interface SnapshotRecord {
   accountSolana: string;
@@ -55,68 +55,57 @@ export async function initializeSnapshotData(csvData: string): Promise<void> {
 
 export async function getSnapshotRecords(): Promise<SnapshotRecord[]> {
   try {
-    const csvPath = path.join(process.cwd(), 'public', 'snapshot.csv');
-    console.log('Loading CSV from:', csvPath);
+    // Caminho para o arquivo CSV
+    const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
     
-    const fileContent = fs.readFileSync(csvPath, 'utf-8');
-    console.log('CSV file content length:', fileContent.length);
-    console.log('First few lines of CSV:', fileContent.split('\n').slice(0, 3));
-
-    // Primeiro, vamos ler o cabeçalho do CSV
-    const headerLine = fileContent.split('\n')[0];
-    console.log('CSV Header:', headerLine);
-
-    const records = parse(fileContent, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-      delimiter: ';',
-      from_line: 2 // Pular a linha do cabeçalho
-    });
-    console.log('Parsed records:', records.length);
-    console.log('First record:', records[0]);
-
-    // Validar e transformar os registros
-    const validRecords = records.map((record: any) => {
-      // Pegar as chaves e valores do registro
-      const keys = Object.keys(record);
-      const values = Object.values(record);
-
-      // Encontrar os índices dos campos que precisamos
-      const holderAddressIndex = keys.findIndex(k => k.toLowerCase().includes('holder'));
-      const balanceIndex = keys.findIndex(k => k.toLowerCase().includes('balance') && !k.toLowerCase().includes('normalized'));
-      const balanceNormalizedIndex = keys.findIndex(k => k.toLowerCase().includes('normalized'));
-
-      // Se não encontrou os índices, tenta usar as chaves diretamente
-      const holderAddress = holderAddressIndex >= 0 ? values[holderAddressIndex] : values[1] || '';
-      const balance = balanceIndex >= 0 ? values[balanceIndex] : values[2] || '';
-      const balanceNormalized = balanceNormalizedIndex >= 0 ? values[balanceNormalizedIndex] : values[3] || '';
-
-      return {
-        accountSolana: '', // Não temos esse campo no CSV
-        tokenAccountSolana: '', // Não temos esse campo no CSV
-        holderAddressBSC: holderAddress,
-        balance: balance,
-        publicTag: '', // Não temos esse campo no CSV
-        owner: '', // Não temos esse campo no CSV
-        balanceNormalized: balanceNormalized
+    // Ler o arquivo diretamente
+    const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
+    
+    // Normalizar quebras de linha para garantir compatibilidade
+    const normalizedContent = fileContent.replace(/\r\n/g, "\n");
+    
+    // Dividir por linhas e processar cada uma
+    const lines = normalizedContent.split("\n");
+    console.log(`Total lines in CSV: ${lines.length}`);
+    
+    // Pular a primeira linha (cabeçalho)
+    const records: SnapshotRecord[] = [];
+    
+    // Processar cada linha a partir da linha 1 (após o cabeçalho)
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Pular linhas vazias
+      
+      // Dividir a linha pelos separadores
+      const columns = line.split(";");
+      if (columns.length < 3) continue; // Garantir que tem colunas suficientes
+      
+      // Criar o registro
+      const record: SnapshotRecord = {
+        accountSolana: columns[0]?.trim() || "",
+        tokenAccountSolana: columns[1]?.trim() || "",
+        holderAddressBSC: columns[2]?.trim() || "",
+        balance: columns[3]?.trim() || "0",
+        publicTag: "",
+        owner: "",
+        balanceNormalized: columns[4]?.trim() || "0"
       };
-    });
-
-    // Filtrar registros válidos
-    const filteredRecords = validRecords.filter((record: any) => 
-      record.holderAddressBSC && 
-      record.holderAddressBSC.trim() !== '' && 
-      record.balance && 
-      record.balance.trim() !== ''
-    );
-
-    console.log('Valid records after transformation:', filteredRecords.length);
-    console.log('Sample record:', filteredRecords[0]);
-
-    return filteredRecords;
+      
+      // Adicionar à lista de registros válidos
+      records.push(record);
+    }
+    
+    console.log(`Total records processed: ${records.length}`);
+    
+    // Mostrar alguns registros para verificação
+    if (records.length > 0) {
+      console.log("First record:", records[0]);
+      console.log("Last record:", records[records.length - 1]);
+    }
+    
+    return records;
   } catch (error) {
-    console.error('Error loading snapshot records:', error);
+    console.error("Error loading snapshot records:", error);
     throw error;
   }
 }
@@ -212,5 +201,131 @@ export async function saveMapping(
   } catch (error) {
     console.error("Erro ao salvar mapeamento:", error);
     return { error: (error as Error).message };
+  }
+}
+
+export async function findBySolanaAddressInCSV(
+  solanaAddress: string
+): Promise<SnapshotRecord | null> {
+  try {
+    // Obter todos os registros
+    const records = await getSnapshotRecords();
+    
+    // Normalizar o endereço para comparação
+    const normalizedAddress = solanaAddress.toLowerCase().trim();
+    
+    console.log(`Searching for Solana address: ${normalizedAddress}`);
+    console.log(`Total records to search: ${records.length}`);
+    
+    // Buscar em todos os registros
+    for (const record of records) {
+      // Normalizar o endereço do registro para comparação
+      const recordAddress = record.accountSolana.toLowerCase().trim();
+      
+      // Comparar os endereços
+      if (recordAddress === normalizedAddress) {
+        console.log(`Found matching record for address: ${normalizedAddress}`);
+        return record;
+      }
+    }
+    
+    console.log(`No matching record found for address: ${normalizedAddress}`);
+    return null;
+  } catch (error) {
+    console.error("Error finding Solana address in CSV:", error);
+    return null;
+  }
+}
+
+export async function updateMappingInCSV(
+  solanaAddress: string,
+  evmAddress: string
+): Promise<boolean> {
+  try {
+    // Normalizar os endereços
+    const normalizedSolanaAddress = solanaAddress.toLowerCase().trim();
+    const normalizedEvmAddress = evmAddress.toLowerCase().trim();
+    
+    // Ler o arquivo CSV
+    const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
+    const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
+    
+    // Normalizar quebras de linha
+    const normalizedContent = fileContent.replace(/\r\n/g, "\n");
+    
+    // Dividir por linhas
+    const lines = normalizedContent.split("\n");
+    
+    // Flag para indicar se encontramos o endereço
+    let foundAddress = false;
+    let updateNeeded = false;
+    let emptyLineIndex = -1;
+    
+    // Procurar o endereço Solana em todas as linhas
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const columns = line.split(";");
+      if (columns.length < 3) continue;
+      
+      // Verificar se a primeira coluna (Account) corresponde ao endereço Solana
+      const lineAddress = columns[0]?.toLowerCase().trim() || "";
+      
+      if (lineAddress === normalizedSolanaAddress) {
+        foundAddress = true;
+        
+        // Verificar se já existe um endereço EVM
+        if (columns[2] && columns[2].trim() !== "") {
+          console.log("EVM address already exists for this Solana address:", columns[2]);
+          return false;
+        }
+        
+        // Atualizar o endereço EVM
+        columns[2] = normalizedEvmAddress;
+        lines[i] = columns.join(";");
+        updateNeeded = true;
+        break;
+      }
+      
+      // Guardar índice de uma linha com endereço EVM vazio para uso posterior
+      if (emptyLineIndex === -1 && columns[0] && (!columns[2] || columns[2].trim() === "")) {
+        emptyLineIndex = i;
+      }
+    }
+    
+    // Se encontramos e atualizamos, salvar o arquivo
+    if (foundAddress && updateNeeded) {
+      fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
+      console.log("Successfully updated EVM address for existing Solana address");
+      return true;
+    }
+    
+    // Se não encontramos, mas há uma linha com EVM vazio, usar essa linha
+    if (!foundAddress && emptyLineIndex !== -1) {
+      const columns = lines[emptyLineIndex].split(";");
+      columns[0] = solanaAddress; // usar o endereço original, não o normalizado
+      columns[2] = evmAddress; // usar o endereço original, não o normalizado
+      lines[emptyLineIndex] = columns.join(";");
+      
+      fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
+      console.log("Added mapping to existing line with empty EVM address");
+      return true;
+    }
+    
+    // Se não encontramos e não há linha vazia, adicionar nova linha
+    if (!foundAddress) {
+      const newLine = `${solanaAddress};;${evmAddress};0,01;10000000000000000`;
+      lines.push(newLine);
+      
+      fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
+      console.log("Added new line with Solana-EVM mapping");
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("Error updating mapping in CSV:", error);
+    return false;
   }
 }

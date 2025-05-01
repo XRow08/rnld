@@ -31,6 +31,8 @@ const SolanaWalletPage = () => {
   const [merkleTree, setMerkleTree] = useState<any | null>(null);
   const [showClaimStep, setShowClaimStep] = useState<boolean>(false);
   const [isClaimEnabled, setIsClaimEnabled] = useState<boolean>(false);
+  const [hasExistingEvm, setHasExistingEvm] = useState<boolean>(false);
+  const [existingEvmAddress, setExistingEvmAddress] = useState<string | null>(null);
 
   const TOKEN_CONTRACT = "8hCYPHGC73UxC7gqLDMBHQvgVmtQ6fryCq49tJMCP55D";
   const BSC_CONTRACT = "0x8B9ABDD229ec0C4A28E01b91aacdC5dAAFc25C2b";
@@ -75,6 +77,11 @@ const SolanaWalletPage = () => {
 
         if (data.found) {
           setIsWalletInSnapshot(true);
+          
+          // Verificar se já existe um endereço EVM mapeado
+          const hasEvm = data.hasEVM || false;
+          setHasExistingEvm(hasEvm);
+          
           if (data.record && data.record.balance) {
             setSnapshotBalance(data.record.balance);
           } else {
@@ -87,6 +94,14 @@ const SolanaWalletPage = () => {
             setPublicTag(null);
           }
           
+          // Armazenar o endereço EVM existente, se houver
+          if (hasEvm && data.record && data.record.evmAddress) {
+            setExistingEvmAddress(data.record.evmAddress);
+            console.log("Existing EVM address:", data.record.evmAddress);
+          } else {
+            setExistingEvmAddress(null);
+          }
+          
           if (data.merkleProof) {
             setMerkleProof(data.merkleProof);
             setMerkleRoot(data.root);
@@ -97,12 +112,20 @@ const SolanaWalletPage = () => {
             setMerkleProof(null);
             setVerificationMethod("csv");
           }
+          
+          // Se já tiver EVM mapeado, mostrar mensagem
+          if (hasEvm) {
+            console.log("This Solana address already has an EVM address mapped");
+          }
         } else {
           setIsWalletInSnapshot(false);
           setSnapshotBalance(null);
           setMerkleProof(null);
           setVerificationMethod("unknown");
           setPublicTag(null);
+          setHasExistingEvm(false);
+          setExistingEvmAddress(null);
+          console.log("Solana address not found in snapshot");
         }
       } else {
         console.error("Erro ao consultar API:", await response.text());
@@ -111,6 +134,8 @@ const SolanaWalletPage = () => {
         setMerkleProof(null);
         setVerificationMethod("unknown");
         setPublicTag(null);
+        setHasExistingEvm(false);
+        setExistingEvmAddress(null);
       }
     } catch (error) {
       console.error("Erro ao verificar wallet no snapshot:", error);
@@ -119,6 +144,8 @@ const SolanaWalletPage = () => {
       setMerkleProof(null);
       setVerificationMethod("unknown");
       setPublicTag(null);
+      setHasExistingEvm(false);
+      setExistingEvmAddress(null);
     } finally {
       setIsLoading(false);
     }
@@ -156,30 +183,30 @@ const SolanaWalletPage = () => {
       });
 
       if (!response.ok) {
-        throw new Error("Falha ao salvar mapeamento");
+        const errorData = await response.json();
+        
+        // Tratamento específico para cada tipo de erro
+        if (errorData.code === "NOT_FOUND") {
+          console.error("Endereço Solana não encontrado no snapshot");
+          // Atualizar a UI para refletir isso
+          setIsWalletInSnapshot(false);
+        } else if (errorData.code === "ALREADY_MAPPED") {
+          console.error("Este endereço Solana já possui um endereço EVM mapeado:", errorData.existingEVM);
+          // Você pode mostrar o endereço EVM já mapeado na UI se desejar
+        } else {
+          console.error("Erro ao salvar mapeamento:", errorData.error || "Erro desconhecido");
+        }
+        
+        throw new Error(errorData.error || "Falha ao salvar mapeamento");
       }
 
       const data = await response.json();
-      const walletFound = data.inSnapshot === true;
-
-      // Atualizar todos os estados necessários
-      setIsWalletInSnapshot(walletFound);
-      setSnapshotBalance(data.balance || snapshotBalance);
-      setMerkleProof(data.merkleProof || null);
-      setMerkleRoot(data.root || null);
-      setMerkleLeaves(data.leafs || null);
-      setMerkleTree(data.tree || null);
-      setVerificationMethod(data.merkleProof ? "merkle" : "csv");
-      setPublicTag(data.publicTag || publicTag);
       
-      // Salvar no localStorage
-      localStorage.setItem(publicKey.toString(), evmAddress);
-      
-      // Marcar como salvo com sucesso
+      // Atualizar o estado para refletir o sucesso
       setIsStoredSuccessfully(true);
 
       // Mostrar o componente de claim se tiver todos os dados necessários
-      if (walletFound && data.merkleProof && data.balance) {
+      if (data.success && data.record && data.record.balance) {
         setShowClaimStep(true);
       }
     } catch (error: any) {
@@ -402,7 +429,7 @@ const SolanaWalletPage = () => {
                     <div className="mt-4 p-4 bg-yellow-900 bg-opacity-30 border border-[rgb(247,216,111)] text-[rgb(247,216,111)] rounded-md">
                       <p className="font-bold">Found in Snapshot!</p>
                       <p className="text-sm mt-1">
-                        Your wallet has a public tag: {publicTag || "No tag"}
+                        Your wallet has a balance of: {snapshotBalance || "No balance"}
                       </p>
                       {merkleProof && (
                         <p className="text-xs mt-1 text-gray-400">
@@ -466,7 +493,19 @@ const SolanaWalletPage = () => {
                     )}
                   </p>
 
-                  {!isWalletInSnapshot && !isLoading && (
+                  {hasExistingEvm && existingEvmAddress && (
+                    <div className="mb-4 p-4 bg-yellow-900 bg-opacity-30 border border-yellow-500 text-yellow-400 rounded-md">
+                      <p className="font-bold">Mapping Already Exists!</p>
+                      <p className="text-sm mt-1">
+                        Your Solana address already has an EVM address mapped. You cannot change it.
+                      </p>
+                      <p className="text-sm mt-2 font-mono break-all">
+                        <span className="font-semibold">EVM Address:</span> {existingEvmAddress}
+                      </p>
+                    </div>
+                  )}
+
+                  {!isWalletInSnapshot && (
                     <div className="mb-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
                       <p className="font-bold">Wallet Not Found!</p>
                       <p className="text-sm mt-1">
@@ -481,14 +520,11 @@ const SolanaWalletPage = () => {
                       <EVMAddressForm
                         onSubmit={handleFormSubmit}
                         isSubmitting={isLoading}
+                        walletInSnapshot={isWalletInSnapshot}
+                        errorMessage={isWalletInSnapshot ? "" : "Your Solana wallet is not in our snapshot."}
+                        hasExistingEvm={hasExistingEvm}
+                        existingEvmAddress={existingEvmAddress || undefined}
                       />
-                      {!isWalletInSnapshot && (
-                        <div className="text-center">
-                          <p className="text-sm text-gray-400">
-                            You need to have a valid Solana wallet in our snapshot to proceed.
-                          </p>
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <div
@@ -511,11 +547,11 @@ const SolanaWalletPage = () => {
                       </p>
                       <p className="text-sm break-all">EVM: {evmAddress}</p>
 
-                      {isWalletInSnapshot && (
+                      {isWalletInSnapshot && snapshotBalance && (
                         <>
                           <p className="text-sm mt-2">
-                            <span className="font-semibold">Amount:</span>{" "}
-                            {publicTag || "No tag"}
+                            <span className="font-semibold">Balance:</span>{" "}
+                            {snapshotBalance}
                           </p>
                         </>
                       )}
