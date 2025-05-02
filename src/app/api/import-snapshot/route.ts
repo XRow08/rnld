@@ -84,7 +84,6 @@ async function importDirectToSupabase(): Promise<ImportResult> {
       
       const solanaAddress = parts[0]?.trim();
       if (!solanaAddress) continue;
-      
       const evmAddress = parts[2] ? parts[2].trim() : "";
       const balance = parts[3] ? parts[3].replace(/\./g, "").replace(/,/g, ".") : "0";
       const balance_normal = parts[4] ||"0";
