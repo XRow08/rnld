@@ -20,7 +20,7 @@ export function useClaim() {
       if (!address) throw new Error("No wallet connected");
       const url = `/api/merkle-info/${address.toLowerCase()}`;
       const { data } = await axios.get(url);
-      const amount = ethers.parseEther(data.value);
+      const amount = data.value;
       const proof = data.proof || [];
       return { amount, proof };
     } catch (error) {
