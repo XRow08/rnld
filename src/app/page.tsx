@@ -5,13 +5,9 @@ import { FaDiscord, FaTelegramPlane } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
 import Link from "next/link";
 import { StyledConnectButton } from "@/components/StyledConnectButton";
-
-require("@solana/wallet-adapter-react-ui/styles.css");
+import { BSC_CONTRACT } from "@/constants";
 
 const SolanaWalletPage = () => {
-  const TOKEN_CONTRACT = "8hCYPHGC73UxC7gqLDMBHQvgVmtQ6fryCq49tJMCP55D";
-  const BSC_CONTRACT = "0x8B9ABDD229ec0C4A28E01b91aacdC5dAAFc25C2b";
-
   return (
     <main className="min-h-screen bg-black text-white flex flex-col justify-between">
       <header className="fixed top-10 z-10 w-full flex items-center justify-center px-20">
@@ -25,14 +21,6 @@ const SolanaWalletPage = () => {
               </span>
               <span className="text-[8px] leading-3 font-black">
                 {BSC_CONTRACT}
-              </span>
-            </div>
-            <div className="px-2 flex items-center">
-              <span className="text-[8px] leading-3 text-black font-black">
-                TOKEN ADDRESS SOL:
-              </span>
-              <span className="text-[8px] leading-3 font-black">
-                {TOKEN_CONTRACT}
               </span>
             </div>
           </div>
