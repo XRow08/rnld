@@ -10,7 +10,7 @@ export const revalidate = 0;
 
 export async function GET(request: Request) {
   try {
-    const { root, proofs, leaves, timestamp } =
+   /*  const { root, proofs, leaves, timestamp } =
       await generateAndCacheMerkleTree();
 
     const response = NextResponse.json({
@@ -33,8 +33,8 @@ export async function GET(request: Request) {
     );
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");
-
-    return response;
+ */
+    return null;
   } catch (error) {
     console.error("Error generating Merkle tree info:", error);
     return NextResponse.json(
