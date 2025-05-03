@@ -41,7 +41,10 @@ export function useClaim() {
         gasLimit: 100000,
       });
       const receipt = await tx.wait();
-      if (receipt?.hash) setHash(receipt.hash);
+      if (receipt?.hash) {
+        setHash(receipt.hash);
+        setError(false);
+      }
       return receipt?.hash;
     } catch (error) {
       console.error(error);
