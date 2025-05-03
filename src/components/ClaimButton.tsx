@@ -1,38 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 
-interface ClaimButtonProps {
-  snapshotBalance: string | null;
-  evmAddress: string;
-  merkleProof: string[] | null;
-  isEnabled: boolean;
-}
-
-// Interface for airdrop data
-interface AirdropData {
-  root: string;
-  address: string;
-  value: string;
-  proof: string[];
-  leafIndex: number;
-}
-
-export const ClaimButton = ({
-  snapshotBalance,
-  isEnabled,
-}: ClaimButtonProps) => {
+export const ClaimButton = () => {
   const { publicKey } = useWallet();
   const [isLoading, setIsLoading] = useState(false);
   const [claimStatus, setClaimStatus] = useState<
     "idle" | "pending" | "success" | "error"
   >("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [isEnabled, setIsEnabled] = useState(false);
 
   const handleClaim = async () => {
     if (!publicKey) return;
-   /*  console.log(publicKey);
+    /*  console.log(publicKey);
     setIsLoading(true);
     setClaimStatus("pending");
 
@@ -46,10 +28,6 @@ export const ClaimButton = ({
     } */
   };
 
-  useEffect(() => {
-    handleClaim();
-  }, [publicKey]);
-
   return (
     <div className="mt-8 border border-[rgb(247,216,111)] rounded-lg p-6 bg-gray-900 bg-opacity-80">
       <h3 className="text-xl font-bold text-[rgb(247,216,111)] mb-4">
@@ -60,34 +38,12 @@ export const ClaimButton = ({
         your address on BSC at TGE..
       </p>
 
-      {snapshotBalance && (
+      {/* {snapshotBalance && (
         <div className="p-4 bg-yellow-900 bg-opacity-30 border border-[rgb(247,216,111)] text-[rgb(247,216,111)] rounded-md mb-4">
           <p className="font-bold">Available Balance for Claim</p>
           <p className="text-2xl font-bold mt-1">{snapshotBalance} STAR10</p>
         </div>
-      )}
-
-      {!isEnabled && (
-        <div className="mb-4 p-4 bg-gray-800 bg-opacity-70 border border-gray-700 text-gray-400 rounded-md">
-          <p className="font-bold">Claim Disabled</p>
-          <p className="text-sm mt-1">
-            To enable claiming, be sure to:
-            <ul className="ml-5 mt-2 list-disc">
-              <li>
-                Connect your Solana wallet if you are a Solana holder on the
-                delegation step
-              </li>
-              <li>
-                Connect your bsc wallet after the delegation for solana holders
-                of if you are a bsc holder
-              </li>
-              <li>Verify your wallet ownership</li>
-              <li>Have STAR10 tokens in snapshot</li>
-              <li>Claim tokens at TGE</li>
-            </ul>
-          </p>
-        </div>
-      )}
+      )} */}
 
       <button
         onClick={handleClaim}
