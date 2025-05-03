@@ -56,8 +56,7 @@ const SolanaWalletPage = () => {
             STAR10 TOKEN PORTAL
           </h1>
           <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto text-gray-300">
-            The official token of Ronaldinho Gaúcho. Connect your Phantom wallet
-            to check your STAR10 balance.
+            The official token of Ronaldinho Gaúcho.
           </p>
         </section>
 
