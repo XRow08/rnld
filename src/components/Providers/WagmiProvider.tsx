@@ -5,13 +5,36 @@ import "@rainbow-me/rainbowkit/styles.css";
 import * as viemChains from "viem/chains";
 import { PropsWithChildren } from "react";
 import { WagmiProvider } from "wagmi";
+import {
+  injectedWallet,
+  rainbowWallet,
+  metaMaskWallet,
+  trustWallet,
+  ledgerWallet,
+  walletConnectWallet,
+  coinbaseWallet,
+} from '@rainbow-me/rainbowkit/wallets';
 
 export default function WagmiProv({ children }: PropsWithChildren) {
   const config = getDefaultConfig({
     appName: "FIDC",
     projectId: "4ebbf2eddb8738c4c84cd8082b5e9756",
-    chains: [viemChains.holesky],
+    chains: [viemChains.bsc],
     ssr: true,
+    wallets: [
+      {
+        groupName: 'Popular',
+        wallets: [
+          injectedWallet,
+          metaMaskWallet,
+          ledgerWallet,
+          walletConnectWallet,
+          coinbaseWallet,
+          trustWallet,
+          rainbowWallet,
+        ]
+      }
+    ],
   });
 
   const queryClient = new QueryClient();
