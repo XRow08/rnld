@@ -1,32 +1,8 @@
 "use client";
-
-import { useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useClaim } from "@/hooks/useClaim";
 
 export const ClaimButton = () => {
-  const { publicKey } = useWallet();
-  const [isLoading, setIsLoading] = useState(false);
-  const [claimStatus, setClaimStatus] = useState<
-    "idle" | "pending" | "success" | "error"
-  >("idle");
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [isEnabled, setIsEnabled] = useState(false);
-
-  const handleClaim = async () => {
-    if (!publicKey) return;
-    /*  console.log(publicKey);
-    setIsLoading(true);
-    setClaimStatus("pending");
-
-    try {
-      
-    } catch (error) {
-      console.error("Error processing claim:", error);
-      setClaimStatus("error");
-    } finally {
-      setIsLoading(false);
-    } */
-  };
+  const { isLoading, onClaim, hash, error } = useClaim();
 
   return (
     <div className="mt-8 border border-[rgb(247,216,111)] rounded-lg p-6 bg-gray-900 bg-opacity-80">
@@ -38,25 +14,15 @@ export const ClaimButton = () => {
         your address on BSC at TGE..
       </p>
 
-      {/* {snapshotBalance && (
-        <div className="p-4 bg-yellow-900 bg-opacity-30 border border-[rgb(247,216,111)] text-[rgb(247,216,111)] rounded-md mb-4">
-          <p className="font-bold">Available Balance for Claim</p>
-          <p className="text-2xl font-bold mt-1">{snapshotBalance} STAR10</p>
-        </div>
-      )} */}
-
       <button
-        onClick={handleClaim}
-        disabled={true}
-        /* disabled={isLoading || claimStatus === "success" || !isEnabled} */
+        onClick={onClaim}
+        disabled={isLoading || !!hash}
         className={`w-full py-3 px-4 rounded-lg font-bold transition-all duration-300 
           ${
             isLoading
               ? "bg-gray-600 cursor-wait"
-              : claimStatus === "success"
+              : hash
               ? "bg-green-600 hover:bg-green-700"
-              : !isEnabled
-              ? "bg-gray-700 text-gray-400 cursor-not-allowed"
               : "bg-[rgb(247,216,111)] hover:bg-yellow-700 text-black"
           }`}
       >
@@ -83,14 +49,14 @@ export const ClaimButton = () => {
             </svg>
             <span>Processing...</span>
           </div>
-        ) : claimStatus === "success" ? (
+        ) : hash ? (
           "Claim Processed Successfully!"
         ) : (
           "Claim STAR10 Tokens"
         )}
       </button>
 
-      {claimStatus === "success" && txHash && (
+      {hash && (
         <div className="mt-4 p-4 bg-green-900 bg-opacity-30 border border-green-500 text-green-400 rounded-md">
           <p className="font-bold">Transaction Sent!</p>
           <p className="text-sm mt-1">
@@ -98,12 +64,12 @@ export const ClaimButton = () => {
             be completed soon.
           </p>
           <p className="text-sm mt-1 break-all">
-            <span className="font-semibold">TX Hash:</span> {txHash}
+            <span className="font-semibold">TX Hash:</span> {hash}
           </p>
         </div>
       )}
 
-      {claimStatus === "error" && (
+      {error && (
         <div className="mt-4 p-4 bg-red-900 bg-opacity-30 border border-red-500 text-red-400 rounded-md">
           <p className="font-bold">Error Processing Claim</p>
           <p className="text-sm mt-1">

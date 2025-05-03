@@ -4,6 +4,7 @@ import { ClaimButton } from "@/components/ClaimButton";
 import { FaDiscord, FaTelegramPlane } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
 import Link from "next/link";
+import { StyledConnectButton } from "@/components/StyledConnectButton";
 
 require("@solana/wallet-adapter-react-ui/styles.css");
 
@@ -72,11 +73,9 @@ const SolanaWalletPage = () => {
           </p>
         </section>
 
-        {/* Main Content */}
-        <div className="max-w-md mx-auto pb-20 px-4">
-          <div className="mt-8">
-            <ClaimButton />
-          </div>
+        <div className="max-w-md mx-auto pb-20 px-4 mt-8">
+          <StyledConnectButton />
+          <ClaimButton />
         </div>
       </section>
 

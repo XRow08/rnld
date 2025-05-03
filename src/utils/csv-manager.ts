@@ -3,106 +3,138 @@ import fs from "fs";
 import path from "path";
 
 interface SnapshotRecord {
-  accountSolana: string;
-  tokenAccountSolana: string;
-  holderAddressBSC: string;
+  holderAddress: string;
   balance: string;
-  publicTag: string;
-  owner: string;
-  balanceNormalized: string;
 }
 
 const SNAPSHOT_STORAGE_KEY = "star10_snapshot_data";
 
+function detectSeparator(content: string): string {
+  const firstLine = content.split("\n")[0];
+  if (firstLine.includes(";")) return ";";
+  if (firstLine.includes(",")) return ",";
+  return ";";
+}
+
+function cleanAddress(address: string): string {
+  let cleaned = address.replace(/["\s]/g, "").trim();
+  if (cleaned && !cleaned.startsWith("0x")) {
+    cleaned = "0x" + cleaned;
+  }
+  if (cleaned.length !== 42) {
+    console.warn(
+      `Endereço inválido encontrado: ${address} -> ${cleaned} (comprimento ${cleaned.length})`
+    );
+    return "";
+  }
+
+  return cleaned.toLowerCase();
+}
+
 export function parseCSVToRecords(csvData: string): SnapshotRecord[] {
   const lines = csvData.split("\n");
   const records: SnapshotRecord[] = [];
+  const separator = detectSeparator(csvData);
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    const values = line.split(";");
-    if (values.length < 3) continue;
+    const columns = [];
+    let currentValue = "";
+    let inQuotes = false;
 
-    const cleanBalance = values[3]
-      ? values[3].replace(/\./g, "").replace(/,/g, ".")
-      : "";
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
 
-    records.push({
-      accountSolana: values[0] ? values[0].trim() : "",
-      tokenAccountSolana: values[1] ? values[1].trim() : "",
-      holderAddressBSC: values[2] ? values[2].trim() : "",
-      balance: cleanBalance,
-      publicTag: values[4] ? values[4].trim() : "",
-      owner: values[5] ? values[5].trim() : "",
-      balanceNormalized: values[6] ? values[6].trim() : "",
-    });
+      if (char === '"' && (j === 0 || line[j - 1] !== "\\")) {
+        inQuotes = !inQuotes;
+      } else if (char === separator && !inQuotes) {
+        columns.push(currentValue);
+        currentValue = "";
+      } else {
+        currentValue += char;
+      }
+    }
+
+    columns.push(currentValue);
+
+    if (columns.length < 3) continue;
+
+    let holderAddress = columns[0] ? columns[0].trim().replace(/"/g, "") : "";
+    holderAddress = cleanAddress(holderAddress);
+
+    const fullBalance =
+      columns.length >= 3 ? columns[2].trim().replace(/"/g, "") : "";
+
+    if (holderAddress && fullBalance) {
+      records.push({ holderAddress, balance: fullBalance });
+    }
   }
 
-  console.log("CSV Parsed Records:", records);
+  if (records.length > 0) {
+    console.log("First record example:", records[0]);
+  }
+
   return records;
 }
 
 export async function initializeSnapshotData(csvData: string): Promise<void> {
   if (typeof window === "undefined") return;
-
   const records = parseCSVToRecords(csvData);
   localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(records));
-
-  console.log(`Initialized ${records.length} records in localStorage`);
 }
 
 export async function getSnapshotRecords(): Promise<SnapshotRecord[]> {
   try {
-    // Caminho para o arquivo CSV
     const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
-    
-    // Ler o arquivo diretamente
-    const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
-    
-    // Normalizar quebras de linha para garantir compatibilidade
+    const fileContent = fs.readFileSync(csvPath, {
+      encoding: "utf-8",
+      flag: "r",
+    });
+    const separator = detectSeparator(fileContent);
     const normalizedContent = fileContent.replace(/\r\n/g, "\n");
-    
-    // Dividir por linhas e processar cada uma
     const lines = normalizedContent.split("\n");
-    console.log(`Total lines in CSV: ${lines.length}`);
-    
-    // Pular a primeira linha (cabeçalho)
+    if (lines.length > 0) console.log("Header sample:", lines[0]);
+    if (lines.length > 1) console.log("First data line sample:", lines[1]);
+
     const records: SnapshotRecord[] = [];
-    
-    // Processar cada linha a partir da linha 1 (após o cabeçalho)
+
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line) continue; // Pular linhas vazias
-      
-      // Dividir a linha pelos separadores
-      const columns = line.split(";");
-      if (columns.length < 3) continue; // Garantir que tem colunas suficientes
-      
-      // Criar o registro
-      const record: SnapshotRecord = {
-        accountSolana: columns[0]?.trim() || "",
-        tokenAccountSolana: columns[1] ? columns[1].trim() : "",
-        holderAddressBSC: columns[2] ? columns[2].trim() : "",
-        balance: columns[3]?.trim() || "0",
-        publicTag: "",
-        owner: "",
-        balanceNormalized: columns[4]?.trim() || "0"
-      };
-      
-      // Adicionar à lista de registros válidos
-      records.push(record);
+      if (!line) continue;
+      const columns = [];
+      let currentValue = "";
+      let inQuotes = false;
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"' && (j === 0 || line[j - 1] !== "\\")) {
+          inQuotes = !inQuotes;
+        } else if (char === separator && !inQuotes) {
+          columns.push(currentValue);
+          currentValue = "";
+        } else {
+          currentValue += char;
+        }
+      }
+      columns.push(currentValue);
+      if (columns.length < 3) continue;
+      let holderAddress = columns[0] ? columns[0].trim().replace(/"/g, "") : "";
+      holderAddress = cleanAddress(holderAddress);
+      if (!holderAddress) continue;
+      const fullBalance =
+        columns.length >= 3 ? columns[2].trim().replace(/"/g, "") : "";
+      if (!fullBalance) continue;
+      records.push({ holderAddress, balance: fullBalance });
     }
-    
-    console.log(`Total records processed: ${records.length}`);
-    
-    // Mostrar alguns registros para verificação
+
     if (records.length > 0) {
       console.log("First record:", records[0]);
-      console.log("Last record:", records[records.length - 1]);
+      if (records.length > 1) {
+        console.log("Second record:", records[1]);
+      }
     }
-    
+
     return records;
   } catch (error) {
     console.error("Error loading snapshot records:", error);
@@ -158,7 +190,7 @@ export async function updateEVMAddressForSolana(
     );
 
     if (existingRecordIndex >= 0) {
-      records[existingRecordIndex].holderAddressBSC = evmAddress;
+      records[existingRecordIndex].holderAddress = evmAddress;
     } else {
       records.push({
         accountSolana: solanaAddress,
@@ -205,12 +237,16 @@ export async function saveMapping(
 }
 
 // Função para salvar mapeamentos em um arquivo separado que será acessível em produção
-async function saveMappingToFile(solanaAddress: string, evmAddress: string, balance: string): Promise<boolean> {
+async function saveMappingToFile(
+  solanaAddress: string,
+  evmAddress: string,
+  balance: string
+): Promise<boolean> {
   try {
     // Caminho para um diretório com permissões de escrita (pasta tmp/ ou .next/)
     const mappingsDir = path.join(process.cwd(), "public", "data");
     const mappingsPath = path.join(mappingsDir, "mappings.json");
-    
+
     // Certificar-se de que o diretório existe
     try {
       if (!fs.existsSync(mappingsDir)) {
@@ -220,7 +256,7 @@ async function saveMappingToFile(solanaAddress: string, evmAddress: string, bala
     } catch (mkdirError) {
       console.warn("Could not create mappings directory:", mkdirError);
     }
-    
+
     // Ler mapeamentos existentes ou criar um novo array
     let mappings = [];
     try {
@@ -233,19 +269,22 @@ async function saveMappingToFile(solanaAddress: string, evmAddress: string, bala
       console.warn("Error reading existing mappings:", readError);
       mappings = []; // Iniciar com array vazio se não puder ler
     }
-    
+
     // Verificar se o endereço Solana já existe
     const existingIndex = mappings.findIndex(
       (m: any) => m.solanaAddress.toLowerCase() === solanaAddress.toLowerCase()
     );
-    
+
     if (existingIndex >= 0) {
       // Já existe um mapeamento, verificar se tem EVM
-      if (mappings[existingIndex].evmAddress && mappings[existingIndex].evmAddress.trim() !== "") {
+      if (
+        mappings[existingIndex].evmAddress &&
+        mappings[existingIndex].evmAddress.trim() !== ""
+      ) {
         console.log("This Solana address already has an EVM mapping");
         return false;
       }
-      
+
       // Atualizar o mapeamento existente
       mappings[existingIndex].evmAddress = evmAddress;
       mappings[existingIndex].updatedAt = new Date().toISOString();
@@ -255,30 +294,30 @@ async function saveMappingToFile(solanaAddress: string, evmAddress: string, bala
         solanaAddress,
         evmAddress,
         balance,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       });
     }
-    
+
     // Salvar o arquivo
     fs.writeFileSync(mappingsPath, JSON.stringify(mappings, null, 2), "utf-8");
     console.log(`Saved ${mappings.length} mappings to file`);
-    
+
     // Também tentar salvar em formato CSV para fácil visualização
     try {
       const csvPath = path.join(mappingsDir, "mappings.csv");
       let csvContent = "SolanaAddress;EVMAddress;Balance;CreatedAt\n";
-      
+
       mappings.forEach((m: any) => {
         csvContent += `${m.solanaAddress};${m.evmAddress};${m.balance};${m.createdAt}\n`;
       });
-      
+
       fs.writeFileSync(csvPath, csvContent, "utf-8");
       console.log("Also saved mappings as CSV");
     } catch (csvError) {
       console.warn("Could not save CSV version:", csvError);
       // Não falhar por causa disso
     }
-    
+
     return true;
   } catch (error) {
     console.error("Error saving mapping to file:", error);
@@ -287,31 +326,38 @@ async function saveMappingToFile(solanaAddress: string, evmAddress: string, bala
 }
 
 // Função para buscar mapeamento EVM existente para um endereço Solana
-export async function getMappingForSolanaAddress(solanaAddress: string): Promise<string | null> {
+export async function getMappingForSolanaAddress(
+  solanaAddress: string
+): Promise<string | null> {
   try {
     const normalizedAddress = solanaAddress.toLowerCase().trim();
-    
+
     // Primeiro verificar no arquivo CSV principal
     const record = await findBySolanaAddressInCSV(normalizedAddress);
-    if (record && record.holderAddressBSC && record.holderAddressBSC.trim() !== "") {
-      return record.holderAddressBSC;
+    if (record && record.holderAddress && record.holderAddress.trim() !== "") {
+      return record.holderAddress;
     }
-    
+
     // Se não encontrou, verificar no arquivo de mapeamentos
-    const mappingsPath = path.join(process.cwd(), "public", "data", "mappings.json");
+    const mappingsPath = path.join(
+      process.cwd(),
+      "public",
+      "data",
+      "mappings.json"
+    );
     if (fs.existsSync(mappingsPath)) {
       const data = fs.readFileSync(mappingsPath, "utf-8");
       const mappings = JSON.parse(data);
-      
+
       const mapping = mappings.find(
         (m: any) => m.solanaAddress.toLowerCase() === normalizedAddress
       );
-      
+
       if (mapping && mapping.evmAddress) {
         return mapping.evmAddress;
       }
     }
-    
+
     return null;
   } catch (error) {
     console.error("Error getting mapping for Solana address:", error);
@@ -324,34 +370,34 @@ export async function findBySolanaAddressInCSV(
 ): Promise<SnapshotRecord | null> {
   try {
     const normalizedAddress = solanaAddress.toLowerCase().trim();
-    
+
     // Primeiro verificar mapeamento salvo separadamente
     const existingEVM = await getMappingForSolanaAddress(normalizedAddress);
-    
+
     // Obter dados do snapshot
     const records = await getSnapshotRecords();
-    
+
     console.log(`Searching for Solana address: ${normalizedAddress}`);
     console.log(`Total records to search: ${records.length}`);
-    
+
     // Buscar em todos os registros
     for (const record of records) {
       // Normalizar o endereço do registro para comparação
-      const recordAddress = record.accountSolana.toLowerCase().trim();
-      
+      const recordAddress = record.holderAddress.toLowerCase().trim();
+
       // Comparar os endereços
       if (recordAddress === normalizedAddress) {
         console.log(`Found matching record for address: ${normalizedAddress}`);
-        
+
         // Se temos um mapeamento EVM salvo separadamente, usá-lo
         if (existingEVM) {
-          record.holderAddressBSC = existingEVM;
+          record.holderAddress = existingEVM;
         }
-        
+
         return record;
       }
     }
-    
+
     console.log(`No matching record found for address: ${normalizedAddress}`);
     return null;
   } catch (error) {
@@ -368,48 +414,56 @@ export async function updateMappingInCSV(
     // Normalizar os endereços
     const normalizedSolanaAddress = solanaAddress.toLowerCase().trim();
     const normalizedEvmAddress = evmAddress.toLowerCase().trim();
-    
+
     // Verificar primeiro se o endereço Solana existe no snapshot
     const record = await findBySolanaAddressInCSV(normalizedSolanaAddress);
-    
+
     // Se o endereço não existir no snapshot, retornar falso
     if (!record) {
       console.log("Solana address not found in snapshot");
       return false;
     }
-    
+
     // Verificar se já existe um mapeamento via função de busca que inclui arquivo separado
-    const existingEVM = await getMappingForSolanaAddress(normalizedSolanaAddress);
+    const existingEVM = await getMappingForSolanaAddress(
+      normalizedSolanaAddress
+    );
     if (existingEVM) {
-      console.log("This Solana address already has an EVM address mapped:", existingEVM);
+      console.log(
+        "This Solana address already has an EVM address mapped:",
+        existingEVM
+      );
       return false;
     }
-    
+
     // Tentar salvar primeiro no arquivo CSV
     let savedInCSV = false;
     try {
       const csvPath = path.join(process.cwd(), "public", "snapshot.csv");
-      const fileContent = fs.readFileSync(csvPath, { encoding: "utf-8", flag: "r" });
-      
+      const fileContent = fs.readFileSync(csvPath, {
+        encoding: "utf-8",
+        flag: "r",
+      });
+
       // Normalizar quebras de linha
       const normalizedContent = fileContent.replace(/\r\n/g, "\n");
-      
+
       // Dividir por linhas
       const lines = normalizedContent.split("\n");
-      
+
       // Procurar o endereço Solana em todas as linhas
       let updated = false;
-      
+
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-        
+
         const columns = line.split(";");
         if (columns.length < 3) continue;
-        
+
         // Verificar se a primeira coluna (Account) corresponde ao endereço Solana
         const lineAddress = columns[0]?.toLowerCase().trim() || "";
-        
+
         if (lineAddress === normalizedSolanaAddress) {
           // Atualizar o endereço EVM
           columns[2] = normalizedEvmAddress;
@@ -418,7 +472,7 @@ export async function updateMappingInCSV(
           break;
         }
       }
-      
+
       if (updated) {
         // Tentar escrever o arquivo atualizado
         fs.writeFileSync(csvPath, lines.join("\n"), "utf-8");
@@ -428,16 +482,16 @@ export async function updateMappingInCSV(
     } catch (csvError) {
       console.warn("Could not update CSV file directly:", csvError);
     }
-    
+
     // Se não conseguiu salvar no CSV ou não encontrou o endereço, salvar em arquivo separado
     if (!savedInCSV) {
       console.log("Saving mapping to separate file...");
       const saved = await saveMappingToFile(
-        solanaAddress, 
-        evmAddress, 
+        solanaAddress,
+        evmAddress,
         record.balance || "0"
       );
-      
+
       if (saved) {
         console.log("Successfully saved mapping to separate file");
         return true;
@@ -446,21 +500,21 @@ export async function updateMappingInCSV(
         return false;
       }
     }
-    
+
     return true;
   } catch (error) {
     console.error("Error updating mapping in CSV:", error);
-    
+
     // Tentar salvar em arquivo separado como último recurso
     try {
       const record = await findBySolanaAddressInCSV(solanaAddress);
       if (record) {
         const saved = await saveMappingToFile(
-          solanaAddress, 
-          evmAddress, 
+          solanaAddress,
+          evmAddress,
           record.balance || "0"
         );
-        
+
         if (saved) {
           console.log("Saved mapping to separate file after error");
           return true;
@@ -469,7 +523,7 @@ export async function updateMappingInCSV(
     } catch (fallbackError) {
       console.error("Error in fallback save:", fallbackError);
     }
-    
+
     return false;
   }
 }
