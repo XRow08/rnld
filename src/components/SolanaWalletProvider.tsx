@@ -2,7 +2,17 @@
 
 import { useMemo } from "react";
 import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
+import { 
+  PhantomWalletAdapter,
+  LedgerWalletAdapter,
+  SolflareWalletAdapter,
+  TorusWalletAdapter,
+  CloverWalletAdapter,
+  BitpieWalletAdapter,
+  MathWalletAdapter,
+  TrustWalletAdapter,
+  CoinbaseWalletAdapter,
+} from "@solana/wallet-adapter-wallets";
 import {
   ConnectionProvider,
   WalletProvider,
@@ -18,7 +28,17 @@ export const SolanaWalletProvider = ({
   const network = WalletAdapterNetwork.Mainnet;
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
 
-  const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
+  const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
+    new LedgerWalletAdapter(),
+    new SolflareWalletAdapter(),
+    new TorusWalletAdapter(),
+    new CloverWalletAdapter(),
+    new BitpieWalletAdapter(),
+    new MathWalletAdapter(),
+    new TrustWalletAdapter(),
+    new CoinbaseWalletAdapter(),
+  ], []);
 
   return (
     <ConnectionProvider endpoint={endpoint}>
