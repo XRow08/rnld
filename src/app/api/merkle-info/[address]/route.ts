@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
-import { getProofForAddress } from "@/utils/merkle-cache";
+import fs from "fs";
+import path from "path";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 export const revalidate = 0;
+
+interface MerkleCache {
+  root: string;
+  proofs: { [address: string]: string[] };
+  leaves: { address: string; value: string }[];
+  timestamp: number;
+}
 
 export async function GET(
   request: Request,
@@ -17,10 +25,28 @@ export async function GET(
         { status: 400 }
       );
     }
+    const CACHE_FILE_PATH = path.join(process.cwd(), "merkle-cache.json");
+    let cacheData: MerkleCache;
 
-    const { root, proof, value, exists } = await getProofForAddress(address);
+    try {
+      const fileContent = fs.readFileSync(CACHE_FILE_PATH, "utf-8");
+      cacheData = JSON.parse(fileContent) as MerkleCache;
+    } catch (error) {
+      console.error("Error reading Merkle cache file:", error);
+      return NextResponse.json(
+        { error: "Failed to read merkle data" },
+        { status: 500 }
+      );
+    }
 
-    if (!exists) {
+    const leaf = cacheData.leaves.find(
+      (leaf) => leaf.address.toLowerCase() === address
+    );
+
+    const proof = cacheData.proofs[address] || [];
+    const root = cacheData.root;
+
+    if (!leaf) {
       return NextResponse.json(
         { error: "Address not found in snapshot" },
         { status: 404 }
@@ -30,7 +56,7 @@ export async function GET(
     const response = NextResponse.json({
       root,
       address,
-      value,
+      value: leaf.value,
       proof,
       exists: true,
     });
@@ -42,7 +68,7 @@ export async function GET(
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");
 
-    return NextResponse.json(response);
+    return response;
   } catch (error) {
     console.error("Error retrieving Merkle proof for address:", error);
     return NextResponse.json(

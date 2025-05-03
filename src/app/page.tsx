@@ -62,7 +62,6 @@ const SolanaWalletPage = () => {
         </section>
 
         <div className="max-w-md mx-auto pb-20 px-4 mt-8">
-          <StyledConnectButton />
           <ClaimButton />
         </div>
       </section>

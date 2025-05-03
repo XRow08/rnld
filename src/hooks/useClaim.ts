@@ -34,11 +34,12 @@ export function useClaim() {
     try {
       setIsLoading(true);
       const { amount, proof } = await getProofAndAmount();
-      console.log("Claim data:", { address, amount, proof });
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = Claim__factory.connect(BSC_CONTRACT, signer);
-      const tx = await contract.claimTokens(amount, proof);
+      const tx = await contract.claimTokens(amount, proof, {
+        gasLimit: 100000,
+      });
       const receipt = await tx.wait();
       if (receipt?.hash) setHash(receipt.hash);
       return receipt?.hash;
