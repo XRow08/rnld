@@ -17,7 +17,7 @@ export async function GET(
         { status: 400 }
       );
     }
-    
+
     const { root, proof, value, exists } = await getProofForAddress(address);
 
     if (!exists) {
@@ -30,7 +30,7 @@ export async function GET(
     const response = NextResponse.json({
       root,
       address,
-      value,           
+      value,
       proof,
       exists: true,
     });
@@ -42,7 +42,7 @@ export async function GET(
     response.headers.set("Pragma", "no-cache");
     response.headers.set("Expires", "0");
 
-    return response;
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Error retrieving Merkle proof for address:", error);
     return NextResponse.json(
